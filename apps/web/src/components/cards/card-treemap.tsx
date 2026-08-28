@@ -205,7 +205,8 @@ export function CardTreemap({
             : {}),
         }),
       ],
-      // No scales: the mark owns its pixels.
+      // The hierarchy mark owns its pixels; the reserved Cartesian scales stay empty.
+      scales: { x: null, y: null },
       guides: false,
       margin: 0,
       focus: "nearest",
@@ -281,8 +282,8 @@ export function CardTreemap({
 /**
  * The config, cast rather than inferred — the same trick, and for the same reason,
  * as `dynamicChart` in `widget-view`: the label channels are present or absent
- * depending on an option, and a treemap configures no scales at all, so the
- * generics cannot be resolved statically.
+ * depending on an option, and a treemap leaves the reserved Cartesian scales
+ * empty, so the generics cannot be resolved statically.
  */
 function treemapChart(definition: unknown) {
   return definition as Parameters<typeof ResponsiveChart>[0]["definition"]

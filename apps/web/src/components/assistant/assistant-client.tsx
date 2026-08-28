@@ -552,6 +552,12 @@ export function AssistantWorkspaceClient({
             markdown: intent.markdown,
             modelKey: intent.modelKey,
             approvalMode,
+            attachments: intent.references.map((item) => ({
+              kind: item.kind,
+              referenceId: item.referenceId,
+              snapshotVersion: item.snapshotVersion ?? null,
+              label: item.label,
+            })),
             historicalBranch: intent.historicalBranch,
           })
           await refresh()

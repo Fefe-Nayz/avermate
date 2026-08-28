@@ -131,21 +131,23 @@ export function CardFriendCurves({
           }
         ),
       ],
-      x: {
-        scale: scaleLinear().domain([
-          points[0]?.at ?? 0,
-          points[points.length - 1]?.at ?? 1,
-        ]),
-        grid: false,
-        axis: false,
-      },
-      y: {
-        scale: scaleLinear().domain([lowest, highest]),
-        grid: true,
-        axis: {
-          line: false,
-          ticks: { size: 0, padding: 6, format: mark },
-          tickLabels: { fontSize: 10 },
+      scales: {
+        x: {
+          scale: scaleLinear().domain([
+            points[0]?.at ?? 0,
+            points[points.length - 1]?.at ?? 1,
+          ]),
+          grid: false,
+          axis: false,
+        },
+        y: {
+          scale: scaleLinear().domain([lowest, highest]),
+          grid: true,
+          axis: {
+            line: false,
+            ticks: { size: 0, padding: 6, format: mark },
+            tickLabels: { fontSize: 10 },
+          },
         },
       },
       clip: true,

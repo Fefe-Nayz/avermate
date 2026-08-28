@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
   Client,
+  type Credential,
   InvalidCredentials,
   Require2FA,
 } from "@blockshub/blocksdirecte";
@@ -108,7 +109,7 @@ describe("the pinned BlocksDirecte transport patch", () => {
       if (requests.length === 2) {
         return Response.json(
           { code: 250, data: { totp: true } },
-          { headers: { "X-Token": "challenge-token" } },
+          { headers: { "2FA-Token": "challenge-token" } },
         );
       }
       return Response.json({
@@ -127,7 +128,10 @@ describe("the pinned BlocksDirecte transport patch", () => {
         challenge = error;
       }
       expect(challenge).toBeInstanceOf(Require2FA);
-      expect(challenge).toMatchObject({ kind: "totp" });
+      expect(challenge).toMatchObject({
+        kind: "totp",
+        token: "challenge-token",
+      });
       await client.auth.loginUsername(
         "contract-user",
         "contract-password",
@@ -187,6 +191,29 @@ describe("the pinned BlocksDirecte transport patch", () => {
     }
 
     expect(cancelled).toBe(true);
+  });
+
+  test("keeps the 0.0.9 wallet module guard non-recursive", () => {
+    const client = new Client({
+      token: "session-token",
+      selectedAccounts: 0,
+      accounts: [
+        {
+          modules: [
+            {
+              code: "CANTINE_BARCODE",
+              params: { numeroBadge: "badge-42" },
+            },
+          ],
+        },
+      ],
+    } as unknown as Credential);
+
+    try {
+      expect(client.wallets.getBadgeNumber()).toBe("badge-42");
+    } finally {
+      client.dispose();
+    }
   });
 });
 

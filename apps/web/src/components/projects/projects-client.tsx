@@ -532,7 +532,7 @@ export function ProjectsClient({
                 </TabsTrigger>
                 <TabsTrigger value="learning">
                   <GraduationCapIcon data-icon="inline-start" />
-                  {t("Learning")}
+                  {t("Progress in this subject")}
                 </TabsTrigger>
                 <TabsTrigger value="productions">
                   <FileOutputIcon data-icon="inline-start" />

@@ -383,33 +383,35 @@ export function MultiSeriesAverageChart({
               ]
             : []),
         ],
-        x: {
-          scale: scaleLinear().domain(prepared.domain),
-          viewport: { domain: viewport },
-          grid: false,
-          axis: {
-            line: false,
-            ticks: {
-              padding: 8,
-              format: (value) =>
-                format.dateTime(new Date(value), {
-                  day: "numeric",
-                  month: "short",
-                }),
+        scales: {
+          x: {
+            scale: scaleLinear().domain(prepared.domain),
+            viewport: { domain: viewport },
+            grid: false,
+            axis: {
+              line: false,
+              ticks: {
+                padding: 8,
+                format: (value) =>
+                  format.dateTime(new Date(value), {
+                    day: "numeric",
+                    month: "short",
+                  }),
+              },
+              tickLabels: { thin: { minGap: 40, priority: "ends" } },
             },
-            tickLabels: { thin: { minGap: 40, priority: "ends" } },
           },
-        },
-        y: {
-          scale: scaleLinear().domain(frame),
-          grid: true,
-          axis: {
-            line: false,
-            ticks: {
-              count: 5,
-              padding: 8,
-              format: (value) =>
-                format.number(value, { maximumFractionDigits: 1 }),
+          y: {
+            scale: scaleLinear().domain(frame),
+            grid: true,
+            axis: {
+              line: false,
+              ticks: {
+                count: 5,
+                padding: 8,
+                format: (value) =>
+                  format.number(value, { maximumFractionDigits: 1 }),
+              },
             },
           },
         },

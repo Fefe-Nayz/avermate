@@ -1,4 +1,4 @@
-export const PYODIDE_VERSION = "314.0.5"
+export const PYODIDE_VERSION = "314.0.6"
 export const PYODIDE_RUNTIME_BASE_URL = `/vendor/pyodide/${PYODIDE_VERSION}/`
 
 export const MAX_PYTHON_SOURCE_BYTES = 64 * 1024

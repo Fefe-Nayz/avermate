@@ -37,15 +37,15 @@ aliases for clients that probe the resource origin first.
 
 ## OAuth 2.1
 
-MCP access uses Better Auth OAuth Provider 1.6.26 and asymmetric, short-lived
+MCP access uses Better Auth OAuth Provider 1.7.2 and asymmetric, short-lived
 JWT access tokens. The resource server verifies the signature against the
 authorization server's local public-key set, as well as `iss`, `aud`, expiry,
 subject, authorized party, scopes, verified-email status, and current account
 suspension state.
 
 This intentionally uses Better Auth's stable OAuth Provider rather than its
-legacy `mcp()` convenience plugin. Better Auth 1.6 documents that plugin as
-being replaced by OAuth Provider, while protocol revision `2026-07-28` still
+legacy `mcp()` convenience plugin. Better Auth documents that plugin as being
+replaced by OAuth Provider, while protocol revision `2026-07-28` still
 requires an explicit modern MCP SDK handler. The split is therefore deliberate:
 Better Auth owns authorization, PKCE, tokens, consent, discovery and resource
 metadata; the official MCP SDK owns the stateless wire protocol, MRTR, routing
@@ -67,7 +67,8 @@ transaction before showing client metadata or requested scopes. Only the
 provider follows the registered redirect URI; the UI never redirects to an
 untrusted query-string value.
 
-Better Auth 1.6.26 does not expose a stable per-user token-list API. Tokens are
+Better Auth 1.7.2 does not expose the per-user token-list API used by this
+integration. Tokens are
 therefore never serialized into settings. Revoking a consent or client blocks
 refresh and future authorization; an already-issued short-lived JWT expires
 normally.

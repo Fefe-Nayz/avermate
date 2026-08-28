@@ -274,6 +274,8 @@ Run these from the repository root unless noted otherwise.
 | `bun run build`                                  | Build all workspaces for production                |
 | `bun run check-types`                            | Typecheck all workspaces                           |
 | `bun run lint`                                   | Run the web ESLint gate                            |
+| `bun run lint:slop`                              | Run Oxlint, anti-slop and selected React Doctor rules |
+| `bun run doctor`                                 | Run the full React Doctor analysis                 |
 | `bun run format:check`                           | Check web-workspace formatting                     |
 | `bun run format`                                 | Format the web workspace                           |
 | `bun run test`                                   | Run unit, contract and integration tests           |
@@ -283,6 +285,15 @@ Run these from the repository root unless noted otherwise.
 | `bun run db:studio`                              | Open Drizzle Studio                                |
 | `bun run admin:set -- user@example.com`          | Grant an existing user the admin role              |
 | `bun run admin:set -- user@example.com --revoke` | Revoke the database admin role                     |
+
+The lint stack is intentionally split. ESLint 9 plus `eslint-config-next`
+remains the exact Next.js/React Web gate; Oxlint runs the repository's custom
+anti-slop rules and the fast correctness/security/accessibility subset of React
+Doctor; Prettier owns formatting. Non-mobile workspaces compile with native
+TypeScript 7. The root `typescript` alias points to the TypeScript 6 JavaScript
+API only because `typescript-eslint` cannot consume tsgo/TypeScript 7 natively
+yet. It is not the compiler used by those workspaces. ESLint 10 is intentionally
+deferred until the complete Next/a11y plugin peer graph supports it.
 
 Native builds are available through `bun run --cwd apps/mobile ios` and
 `bun run --cwd apps/mobile android` once the platform toolchain is installed.

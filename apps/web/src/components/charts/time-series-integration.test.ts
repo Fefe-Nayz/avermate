@@ -122,11 +122,13 @@ function definitionFor(viewport: NumericDomain) {
         ],
       }),
     ],
-    x: {
-      scale: scaleLinear().domain(FULL_DOMAIN),
-      viewport: { domain: viewport },
+    scales: {
+      x: {
+        scale: scaleLinear().domain(FULL_DOMAIN),
+        viewport: { domain: viewport },
+      },
+      y: { scale: scaleLinear().domain([0, 20]) },
     },
-    y: { scale: scaleLinear().domain([0, 20]) },
     color: {
       domain: ["alpha", "beta"],
       range: ["#2563eb", "#f97316"],

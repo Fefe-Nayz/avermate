@@ -56,21 +56,23 @@ export function MiniDistribution({
         radius: 4,
       }),
     ],
-    x: {
-      scale: scaleBand<string>()
-        .domain(data.map(({ label }) => label))
-        .padding(0.12),
-      grid: false,
-      axis: {
-        line: false,
-        ticks: { size: 0, padding: 6 },
-        tickLabels: { fontSize: 10 },
+    scales: {
+      x: {
+        scale: scaleBand<string>()
+          .domain(data.map(({ label }) => label))
+          .padding(0.12),
+        grid: false,
+        axis: {
+          line: false,
+          ticks: { size: 0, padding: 6 },
+          tickLabels: { fontSize: 10 },
+        },
       },
-    },
-    y: {
-      scale: scaleLinear().domain([0, maximum]),
-      grid: false,
-      axis: false,
+      y: {
+        scale: scaleLinear().domain([0, maximum]),
+        grid: false,
+        axis: false,
+      },
     },
     clip: true,
     focus: "nearest",

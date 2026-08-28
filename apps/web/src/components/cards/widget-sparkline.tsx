@@ -262,19 +262,24 @@ export function Sparkline({
           strokeWidth: 0,
         }),
       ],
-      x: {
-        scale: scaleLinear().domain(
-          xMinimum === xMaximum
-            ? [xMinimum - 1, xMaximum + 1]
-            : [xMinimum, xMaximum]
-        ),
-        grid: false,
-        axis: false,
-      },
-      y: {
-        scale: scaleLinear().domain([yMinimum - yPadding, yMaximum + yPadding]),
-        grid: false,
-        axis: false,
+      scales: {
+        x: {
+          scale: scaleLinear().domain(
+            xMinimum === xMaximum
+              ? [xMinimum - 1, xMaximum + 1]
+              : [xMinimum, xMaximum]
+          ),
+          grid: false,
+          axis: false,
+        },
+        y: {
+          scale: scaleLinear().domain([
+            yMinimum - yPadding,
+            yMaximum + yPadding,
+          ]),
+          grid: false,
+          axis: false,
+        },
       },
       gradients: [
         {

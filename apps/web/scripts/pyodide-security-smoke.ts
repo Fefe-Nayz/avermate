@@ -3,7 +3,7 @@ import os from "node:os"
 import path from "node:path"
 
 const PUBLIC_DIR = path.resolve(import.meta.dir, "../public")
-const WORKER_URL = "/vendor/pyodide/314.0.5/pyodide-run.worker.mjs"
+const WORKER_URL = "/vendor/pyodide/314.0.6/pyodide-run.worker.mjs"
 const RESULT_MARKER = "AVERMATE_PYODIDE_SECURITY:"
 
 function browserExecutable() {

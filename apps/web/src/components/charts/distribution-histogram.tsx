@@ -34,21 +34,23 @@ export function DistributionHistogram({
           radius: 6,
         }),
       ],
-      x: {
-        scale: scaleBand<string>()
-          .domain(data.map(({ label }) => label))
-          .padding(0.12),
-        grid: false,
-        axis: {
-          line: false,
-          ticks: { size: 0, padding: 8 },
-          tickLabels: { fontSize: 11 },
+      scales: {
+        x: {
+          scale: scaleBand<string>()
+            .domain(data.map(({ label }) => label))
+            .padding(0.12),
+          grid: false,
+          axis: {
+            line: false,
+            ticks: { size: 0, padding: 8 },
+            tickLabels: { fontSize: 11 },
+          },
         },
-      },
-      y: {
-        scale: scaleLinear().domain([0, maximum]),
-        grid: false,
-        axis: false,
+        y: {
+          scale: scaleLinear().domain([0, maximum]),
+          grid: false,
+          axis: false,
+        },
       },
       clip: true,
       focus: false,

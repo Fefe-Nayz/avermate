@@ -197,10 +197,10 @@ to update the already-managed rows.
 
 ## ÉcoleDirecte
 
-The server pins `@blockshub/blocksdirecte@0.0.8-alpha`, the latest version
-published on npm when this adapter was reviewed. The upstream `main` manifest
-already identifies itself as `0.0.9-alpha`, so the dependency stays exact
-instead of silently consuming an alpha update.
+The server pins `@blockshub/blocksdirecte@0.0.9-alpha`, the latest version
+published on npm when this adapter was reviewed. The dependency stays exact so
+that an alpha update cannot silently bypass the transport patch and its contract
+tests.
 
 The adapter uses BlocksDirecte's real `Client` for authentication, homework,
 timetable, marks, public timeline, and attachment downloads. The active

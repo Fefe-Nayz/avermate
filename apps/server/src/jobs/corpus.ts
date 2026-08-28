@@ -16,6 +16,13 @@ import { coreCorpusIndexService } from "../search/index-service";
 import { SqliteFts5LexicalSearchBackend } from "../search/lexical";
 import { assertEmbeddingPublicationFence } from "../search/embedding-publication-fence";
 import {
+  desiredEmbeddingGenerationVersionIds,
+  EmbeddingGenerationProjectPolicyChangedError,
+  EmbeddingGenerationPublicationFenceChangedError,
+  embeddingVersionSetDigest,
+  publishCompletedEmbeddingGeneration,
+} from "../search/embedding-generation-publication";
+import {
   createOwnedCorpusVectorRuntime,
   type ContentHashedVector,
   type CorpusVectorRuntime,
@@ -659,83 +666,6 @@ async function mediaRowsForVersion(
   return [...selected.values()];
 }
 
-async function generationVersionIds(
-  input: ScopedReembedPayload,
-  spaceId: string,
-) {
-  if (input.scope === "all") {
-    const result = await db.$client.execute({
-      sql: `SELECT id FROM (
-          SELECT versions.id
-          FROM content_sources AS sources
-          JOIN content_versions AS versions
-            ON versions.id = sources.currentVersionId
-            AND versions.sourceId = sources.id
-          WHERE sources.userId = ? AND sources.placement = 'core'
-          UNION
-          SELECT versions.id
-          FROM study_project_items AS items
-          JOIN study_projects AS projects ON projects.id = items.projectId
-          JOIN content_versions AS versions ON versions.id = items.sourceVersionId
-          JOIN content_sources AS sources
-            ON sources.id = versions.sourceId
-            AND sources.userId = projects.userId
-            AND sources.originKind = items.kind
-            AND sources.originId = items.referenceId
-          WHERE projects.userId = ? AND projects.deletedAt IS NULL
-            AND items.trackingMode = 'pinned'
-            AND items.sourceVersionId IS NOT NULL
-            AND sources.placement = 'core'
-        ) ORDER BY id`,
-      args: [input.ownerId, input.ownerId],
-    });
-    return result.rows.map((row) => String(row.id));
-  }
-
-  if (input.requestedProjectId) {
-    const requested = await db.$client.execute({
-      sql: `SELECT 1 FROM study_projects
-        WHERE id = ? AND userId = ? AND deletedAt IS NULL
-          AND retrievalMode = 'advanced-auto' AND embeddingSpaceId = ?
-        LIMIT 1`,
-      args: [input.requestedProjectId, input.ownerId, spaceId],
-    });
-    if (requested.rows.length !== 1) {
-      throw new NonRetryableJobError("CORPUS_REINDEX_PROJECT_POLICY_CHANGED");
-    }
-  }
-
-  // One owner/space alias can only point at one immutable generation. Rebuild
-  // the union of every project that explicitly opted into this exact space so
-  // refreshing one project never evicts another advanced project's vectors.
-  // Lexical-only projects, excluded items and selectors awaiting review never
-  // cross the embedding-provider boundary.
-  const result = await db.$client.execute({
-    sql: `SELECT DISTINCT versions.id
-      FROM study_project_items AS items
-      JOIN study_projects AS projects ON projects.id = items.projectId
-      JOIN content_sources AS sources
-        ON sources.userId = projects.userId
-        AND sources.originKind = items.kind
-        AND sources.originId = items.referenceId
-      JOIN content_versions AS versions
-        ON versions.sourceId = sources.id
-        AND versions.id = CASE
-          WHEN items.trackingMode = 'pinned' THEN items.sourceVersionId
-          ELSE sources.currentVersionId
-        END
-      WHERE projects.userId = ? AND projects.deletedAt IS NULL
-        AND projects.retrievalMode = 'advanced-auto'
-        AND projects.embeddingSpaceId = ?
-        AND items.contextMode != 'exclude'
-        AND items.selectorReviewRequired = 0
-        AND sources.placement = 'core'
-      ORDER BY versions.id`,
-    args: [input.ownerId, spaceId],
-  });
-  return result.rows.map((row) => String(row.id));
-}
-
 async function registerEmbeddingSpace(descriptor: EmbeddingSpaceDescriptor) {
   const descriptorJson = canonicalJson(descriptor);
   const digest = sha256(descriptorJson);
@@ -766,7 +696,7 @@ async function createGeneration(
   publicationEpoch: number,
 ) {
   const generationId = newId("egen");
-  const versionSetDigest = sha256(canonicalJson([...versionIds].sort()));
+  const versionSetDigest = embeddingVersionSetDigest(versionIds);
   const now = Math.floor(Date.now() / 1_000);
   const transaction = await db.$client.transaction("write");
   try {
@@ -811,6 +741,16 @@ function safeGenerationError(error: unknown) {
     : "embedding-generation-failed";
 }
 
+function nonRetryableEmbeddingPublicationError(error: unknown) {
+  if (
+    error instanceof EmbeddingGenerationProjectPolicyChangedError ||
+    error instanceof EmbeddingGenerationPublicationFenceChangedError
+  ) {
+    return new NonRetryableJobError(error.message, { cause: error });
+  }
+  return error;
+}
+
 /**
  * Compatibility entry point for both embedding job kinds. Every invocation now
  * creates a complete owned generation; an individual-version job is promoted
@@ -838,7 +778,16 @@ export async function runCorpusEmbeddingUnavailableJob(
     );
   }
   const descriptor = runtime.embedding.descriptor();
-  const versionIds = await generationVersionIds(rebuild, descriptor.id);
+  let versionIds: string[];
+  try {
+    versionIds = await desiredEmbeddingGenerationVersionIds(
+      db.$client,
+      rebuild,
+      descriptor.id,
+    );
+  } catch (error) {
+    throw nonRetryableEmbeddingPublicationError(error);
+  }
   if (
     rebuild.scope === "advanced-projects" &&
     rebuild.triggerVersionId &&
@@ -937,32 +886,45 @@ export async function runCorpusEmbeddingUnavailableJob(
     options.signal?.throwIfAborted();
     const now = Math.floor(Date.now() / 1_000);
     const transaction = await db.$client.transaction("write");
+    let publication:
+      | Awaited<ReturnType<typeof publishCompletedEmbeddingGeneration>>
+      | undefined;
     try {
-      await assertEmbeddingPublicationFence(
-        rebuild.ownerId,
-        rebuild.publicationEpoch,
+      publication = await publishCompletedEmbeddingGeneration({
         transaction,
-      );
-      await transaction.execute({
-        sql: `UPDATE corpus_embedding_generations
-          SET state = 'superseded', updatedAt = ?
-          WHERE userId = ? AND spaceId = ? AND state = 'active' AND id != ?`,
-        args: [now, rebuild.ownerId, descriptor.id, generationId],
+        scope: rebuild,
+        generationId,
+        spaceId: descriptor.id,
+        publicationEpoch: rebuild.publicationEpoch ?? 0,
+        now,
       });
-      const activated = await transaction.execute({
-        sql: `UPDATE corpus_embedding_generations
-          SET state = 'active', activatedAt = ?, updatedAt = ?
-          WHERE id = ? AND userId = ? AND state = 'staging'
-            AND indexedVersionCount = expectedVersionCount`,
-        args: [now, now, generationId, rebuild.ownerId],
-      });
-      if (Number(activated.rowsAffected) !== 1) {
-        throw new Error("EMBEDDING_GENERATION_ACTIVATION_CONFLICT");
-      }
       await transaction.commit();
     } catch (error) {
       await transaction.rollback();
       throw error;
+    }
+    if (!publication) {
+      throw new Error("EMBEDDING_GENERATION_PUBLICATION_MISSING");
+    }
+    if (publication.status === "superseded") {
+      // Keep the complete immutable collection and its membership rows as an
+      // audit-history record. It never receives activatedAt and therefore can
+      // neither serve retrieval nor move the compatibility alias.
+      return {
+        stage: "superseded" as const,
+        reason: publication.reason,
+        generationId,
+        versionSetDigest,
+        desiredVersionSetDigest: publication.desiredVersionSetDigest,
+        activeGenerationId: publication.activeGenerationId,
+        rebuildJobId: publication.rebuildJobId,
+        versions: versionIds.length,
+        desiredVersions: publication.desiredVersionCount,
+        vectors: vectorCount,
+        chunks: vectorCount,
+        spaceId: descriptor.id,
+        compatibilityAliasActivated: false,
+      };
     }
     // The durable generation row is the sole search pointer. The Qdrant alias
     // remains a compatibility optimization only: concurrent jobs may activate
@@ -1004,6 +966,6 @@ export async function runCorpusEmbeddingUnavailableJob(
         rebuild.ownerId,
       ],
     });
-    throw error;
+    throw nonRetryableEmbeddingPublicationError(error);
   }
 }

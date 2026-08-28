@@ -96,8 +96,8 @@ describe("explicit Python run fences", () => {
   })
 
   test("loads only the pinned local scientific package closure", () => {
-    expect(PYODIDE_VERSION).toBe("314.0.5")
-    expect(PYODIDE_RUNTIME_BASE_URL).toBe("/vendor/pyodide/314.0.5/")
+    expect(PYODIDE_VERSION).toBe("314.0.6")
+    expect(PYODIDE_RUNTIME_BASE_URL).toBe("/vendor/pyodide/314.0.6/")
     expect(packagesForPythonSource("print(1)")).toEqual([])
     expect(packagesForPythonSource("import numpy as np")).toEqual(["numpy"])
     expect(
@@ -218,6 +218,6 @@ describe("explicit Python run fences", () => {
     expect(sandbox).toContain('module_name != "builtins"')
     expect(worker).not.toContain("/api/")
     expect(assets).toContain("failed SHA-256 verification")
-    expect(assets).toContain("314.0.5")
+    expect(assets).toContain("314.0.6")
   })
 })

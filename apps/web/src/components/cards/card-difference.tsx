@@ -283,38 +283,40 @@ export function CardDifference({
        * difference over time and a difference across subjects — and it is also what makes
        * the interpolated crossing above exact rather than approximate.
        */
-      x: {
-        scale: scaleLinear().domain([0, Math.max(1, frame.rows.length - 1)]),
-        grid: false,
-        axis: visualization.axes.x.visible
-          ? {
-              line: false,
-              ticks: {
-                size: 0,
-                padding: 6,
-                // Only the samples are labelled: a tick at 2.5 sits between two buckets,
-                // and naming it after either one would be a lie about which.
-                format: (value: number) =>
-                  Number.isInteger(value)
-                    ? (frame.rows[value]?.labels[
-                        frame.schema.dimensions[0]?.id ?? ""
-                      ] ?? "")
-                    : "",
-              },
-              tickLabels: { fontSize: 10 },
-            }
-          : false,
-      },
-      y: {
-        scale: scaleLinear().domain([lowest, highest]),
-        grid: visualization.axes.y.grid,
-        axis: visualization.axes.y.visible
-          ? {
-              line: false,
-              ticks: { size: 0, padding: 6, format: mark },
-              tickLabels: { fontSize: 10 },
-            }
-          : false,
+      scales: {
+        x: {
+          scale: scaleLinear().domain([0, Math.max(1, frame.rows.length - 1)]),
+          grid: false,
+          axis: visualization.axes.x.visible
+            ? {
+                line: false,
+                ticks: {
+                  size: 0,
+                  padding: 6,
+                  // Only the samples are labelled: a tick at 2.5 sits between two buckets,
+                  // and naming it after either one would be a lie about which.
+                  format: (value: number) =>
+                    Number.isInteger(value)
+                      ? (frame.rows[value]?.labels[
+                          frame.schema.dimensions[0]?.id ?? ""
+                        ] ?? "")
+                      : "",
+                },
+                tickLabels: { fontSize: 10 },
+              }
+            : false,
+        },
+        y: {
+          scale: scaleLinear().domain([lowest, highest]),
+          grid: visualization.axes.y.grid,
+          axis: visualization.axes.y.visible
+            ? {
+                line: false,
+                ticks: { size: 0, padding: 6, format: mark },
+                tickLabels: { fontSize: 10 },
+              }
+            : false,
+        },
       },
       clip: true,
       focus: "nearest",

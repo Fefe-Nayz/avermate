@@ -2,7 +2,7 @@ import { createHash } from "node:crypto"
 import { mkdir, rename, unlink } from "node:fs/promises"
 import path from "node:path"
 
-const PYODIDE_VERSION = "314.0.5"
+const PYODIDE_VERSION = "314.0.6"
 const PYODIDE_PACKAGE_DIR = path.resolve(
   import.meta.dir,
   "../../../node_modules/pyodide"
@@ -20,19 +20,19 @@ const WORKER_ASSET_NAME = "pyodide-run.worker.mjs"
 
 const CORE_ASSETS = {
   "pyodide.mjs":
-    "1fec5d63238eff5d099c209c659b88f480c1d854856301596d64e8e6839a3f50",
+    "69e3f6ccec3e14b465df60be577ca62f536251406b9a00cce019eac5252a2495",
   "pyodide.asm.mjs":
-    "f86edbb66b925ae933ff32ecdcb738ebde2ba926b6be3e485401587de7be89ea",
+    "2ac5eba365ec12839c75c03b39b3be1dd63b798852cc460b014b52238be042f7",
   "pyodide.asm.wasm":
-    "85f66436c802db3dd0caf437134f98af5c69d199c6ffba116ee2bac8be8acf09",
+    "3a0a00dfeaa348ac20f9ef09904233d32d33f644339662d4af368f8a2010f37a",
   "python_stdlib.zip":
-    "3e7b7affd80aaf35fcff786613eebd0ce885a964dbda56714ccecb7573f57a70",
+    "80c5be6babfe03297069703410c3c29404dcf2525d2b128746bae5536f94831f",
   "pyodide-lock.json":
     "3fdaef09e9e365c85e002737720f8d0ab8f278c1c244a2dde6a37663cf488ad4",
 } as const
 
 // This is the exact recursive closure required by numpy + matplotlib in the
-// Pyodide 314.0.5 lockfile. Keeping filenames and digests here makes a package
+// Pyodide 314.0.6 lockfile. Keeping filenames and digests here makes a package
 // release or CDN mutation fail closed instead of silently changing the runtime.
 const PACKAGE_ASSETS = {
   "contourpy-1.3.3-cp314-cp314-pyemscripten_2026_0_wasm32.whl":

@@ -159,20 +159,22 @@ export function CardControl({
             ]
           : []),
       ],
-      x: {
-        scale: scaleLinear().domain([0, Math.max(1, points.length - 1)]),
-        grid: false,
-        // No axis: the x position is "which mark", and numbering them adds a scale
-        // nobody reads. The order is the reading.
-        axis: false,
-      },
-      y: {
-        scale: scaleLinear().domain([lowest, highest]),
-        grid: true,
-        axis: {
-          line: false,
-          ticks: { size: 0, padding: 6, format: mark },
-          tickLabels: { fontSize: 10 },
+      scales: {
+        x: {
+          scale: scaleLinear().domain([0, Math.max(1, points.length - 1)]),
+          grid: false,
+          // No axis: the x position is "which mark", and numbering them adds a scale
+          // nobody reads. The order is the reading.
+          axis: false,
+        },
+        y: {
+          scale: scaleLinear().domain([lowest, highest]),
+          grid: true,
+          axis: {
+            line: false,
+            ticks: { size: 0, padding: 6, format: mark },
+            tickLabels: { fontSize: 10 },
+          },
         },
       },
       clip: true,

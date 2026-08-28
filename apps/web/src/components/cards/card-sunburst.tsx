@@ -84,6 +84,7 @@ export function CardSunburst({
       marks: [
         polar({
           id: "card-sunburst-polar",
+          scales: { angle: null, radius: null },
           marks: [
             sunburst(tiles, {
               id: "card-sunburst",
@@ -107,6 +108,7 @@ export function CardSunburst({
           ],
         }),
       ],
+      scales: { x: null, y: null },
       guides: false,
       margin: 0,
       focus: "nearest",
@@ -167,7 +169,7 @@ export function CardSunburst({
       <ResponsiveChart
         ariaLabel={ariaLabel}
         // The cast the treemap makes for the same reason: a hierarchy mark owns its own
-        // pixels and declares no scales, so the definition cannot be inferred statically.
+        // pixels and leaves the reserved scales empty, so the definition cannot be inferred statically.
         definition={definition as never}
         fill
         height={220}

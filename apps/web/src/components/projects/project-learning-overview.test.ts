@@ -82,6 +82,19 @@ describe("project learning workspace", () => {
     expect(overview).toContain('aria-labelledby="project-learning-title"')
   })
 
+  test("labels the shared year-and-subject projection honestly", async () => {
+    const [overview, projectsClient] = await Promise.all([
+      source("./project-learning-overview.tsx"),
+      source("./projects-client.tsx"),
+    ])
+
+    expect(overview).toContain('t("Progress in this subject")')
+    expect(projectsClient).toContain('t("Progress in this subject")')
+    expect(overview).toContain(
+      "This read-only view is shared by projects linked to the same academic year and subject."
+    )
+  })
+
   test("links back to the authoritative Learning views and exact objectives", async () => {
     const [overview, learningPage] = await Promise.all([
       source("./project-learning-overview.tsx"),

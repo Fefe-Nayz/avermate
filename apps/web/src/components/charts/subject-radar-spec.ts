@@ -240,11 +240,13 @@ export function radarSpec({
       polar({
         id: "main-subject-radar",
         radiusRatio: radiusRatioFor(width),
-        angle: {
-          scale: scalePoint<string>().domain(domain),
-          wrap: true,
+        scales: {
+          angle: {
+            scale: scalePoint<string>().domain(domain),
+            wrap: true,
+          },
+          radius: { scale: scaleLinear().domain([0, scale]) },
         },
-        radius: { scale: scaleLinear().domain([0, scale]) },
         guides: [
           // The rings carry their own values along one spoke. Without them a
           // radar is a shape with no units: you can see that one subject
@@ -335,5 +337,6 @@ export function radarSpec({
         ],
       }),
     ],
+    scales: { x: null, y: null },
   }
 }

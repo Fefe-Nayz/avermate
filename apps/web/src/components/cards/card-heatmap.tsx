@@ -366,32 +366,34 @@ export function CardHeatmap({
           }
         ),
       ],
-      x: {
-        scale: scaleBand<string>().domain(columns).padding(0.06),
-        grid: false,
-        axis: visualization.axes.x.visible
-          ? {
-              line: false,
-              label: visualization.axes.x.label ?? undefined,
-              ticks: {
-                size: 0,
-                format: (value: string) =>
-                  calendar ? calendar.monthOf(Number(value)) : value,
-              },
-            }
-          : false,
-      },
-      y: {
-        scale: scaleBand<string>().domain(rows).padding(0.06),
-        grid: false,
-        axis:
-          visualization.axes.y.visible && calendar
+      scales: {
+        x: {
+          scale: scaleBand<string>().domain(columns).padding(0.06),
+          grid: false,
+          axis: visualization.axes.x.visible
             ? {
                 line: false,
-                label: visualization.axes.y.label ?? undefined,
-                ticks: { size: 0 },
+                label: visualization.axes.x.label ?? undefined,
+                ticks: {
+                  size: 0,
+                  format: (value: string) =>
+                    calendar ? calendar.monthOf(Number(value)) : value,
+                },
               }
             : false,
+        },
+        y: {
+          scale: scaleBand<string>().domain(rows).padding(0.06),
+          grid: false,
+          axis:
+            visualization.axes.y.visible && calendar
+              ? {
+                  line: false,
+                  label: visualization.axes.y.label ?? undefined,
+                  ticks: { size: 0 },
+                }
+              : false,
+        },
       },
       color: { domain: prepared.colorDomain, range: prepared.colorRange },
       focus: "nearest",

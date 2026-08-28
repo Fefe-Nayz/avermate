@@ -203,35 +203,37 @@ export function CardWaterfall({
             inset: 3,
           }),
         ],
-        x: {
-          scale: scaleLinear().domain([lowest, highest]),
-          grid: true,
-          axis: {
-            line: false,
-            ticks: {
-              size: 0,
-              padding: 6,
-              format: (value: number) =>
-                format.number(value * scale, { maximumFractionDigits: 0 }),
+        scales: {
+          x: {
+            scale: scaleLinear().domain([lowest, highest]),
+            grid: true,
+            axis: {
+              line: false,
+              ticks: {
+                size: 0,
+                padding: 6,
+                format: (value: number) =>
+                  format.number(value * scale, { maximumFractionDigits: 0 }),
+              },
+              tickLabels: { fontSize: 10 },
             },
-            tickLabels: { fontSize: 10 },
           },
-        },
-        y: {
-          scale: scaleBand<string>()
-            .domain(rows.map((row) => row.label))
-            .padding(0.18),
-          grid: false,
-          axis: {
-            line: false,
-            // The names, cut to their share of the card — see `waterfallLabel`. Without a
-            // format the axis reserves whatever the longest one needs, and one long subject
-            // name takes the whole plot with it.
-            ticks: {
-              size: 0,
-              format: (label: string) => axisNameAtWidth(label, width),
+          y: {
+            scale: scaleBand<string>()
+              .domain(rows.map((row) => row.label))
+              .padding(0.18),
+            grid: false,
+            axis: {
+              line: false,
+              // The names, cut to their share of the card — see `waterfallLabel`. Without a
+              // format the axis reserves whatever the longest one needs, and one long subject
+              // name takes the whole plot with it.
+              ticks: {
+                size: 0,
+                format: (label: string) => axisNameAtWidth(label, width),
+              },
+              tickLabels: { fontSize: 10 },
             },
-            tickLabels: { fontSize: 10 },
           },
         },
         clip: true,

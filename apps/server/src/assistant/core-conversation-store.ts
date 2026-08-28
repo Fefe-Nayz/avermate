@@ -78,6 +78,13 @@ export type TurnReservation = {
   idempotent: boolean;
 };
 
+export type AssistantAttachmentInput = {
+  kind: AssistantAttachmentKind;
+  referenceId: string;
+  snapshotVersion?: string | null;
+  label: string;
+};
+
 export type EditedMessageProjection =
   | { kind: "run-reserved"; reservation: TurnReservation }
   | {
@@ -365,6 +372,13 @@ function attachmentSupportsCorpusSnapshot(kind: AssistantAttachmentKind) {
   return kind === "file" || kind in corpusOriginKindByAttachmentKind;
 }
 
+function attachmentIdentityKey(input: {
+  kind: AssistantAttachmentKind;
+  referenceId: string;
+}) {
+  return `${input.kind}\0${input.referenceId}`;
+}
+
 function assertAttachmentSnapshotInput(
   kind: AssistantAttachmentKind,
   snapshotVersion: string | null | undefined,
@@ -421,6 +435,7 @@ const TASK_ATTACHMENT_SNAPSHOT_PAYLOAD_VERSION = 1 as const;
 const TASK_ATTACHMENT_TEXT_FIELD_BYTES = 8 * 1024;
 const TASK_ATTACHMENT_TITLE_BYTES = 2 * 1024;
 const TASK_ATTACHMENT_PAYLOAD_BYTES = 32 * 1024;
+const MAX_ASSISTANT_MESSAGE_ATTACHMENTS = 50;
 
 export type FrozenTaskAttachmentSnapshot = {
   payloadVersion: typeof TASK_ATTACHMENT_SNAPSHOT_PAYLOAD_VERSION;
@@ -573,7 +588,14 @@ async function freezeTaskAttachmentSnapshotInTransaction(
 ): Promise<FrozenTaskAttachmentSnapshot | null> {
   const attachment = await one(
     target,
-    `SELECT attachments.* FROM assistant_attachments AS attachments
+    `SELECT attachments.*,
+        EXISTS (
+          SELECT 1 FROM assistant_attachments AS replaced
+          WHERE replaced.messageId = messages.replacesMessageId
+            AND replaced.kind = attachments.kind
+            AND replaced.referenceId = attachments.referenceId
+        ) AS preservedFromReplacement
+      FROM assistant_attachments AS attachments
       JOIN assistant_messages AS messages ON messages.id = attachments.messageId
       JOIN assistant_threads AS threads ON threads.id = messages.threadId
       WHERE attachments.id = ? AND threads.userId = ? LIMIT 1`,
@@ -596,6 +618,10 @@ async function freezeTaskAttachmentSnapshotInTransaction(
   }
   const existing = frozenTaskSnapshotFromRow(attachment);
   if (existing) return existing;
+  // An edited message preserves the exact historical attachment. A legacy
+  // source row without a frozen task payload is therefore unavailable rather
+  // than permission to snapshot the task's current mutable state.
+  if (Boolean(attachment.preservedFromReplacement)) return null;
   const candidate = await ownedTaskSnapshotCandidate(
     target,
     input.ownerId,
@@ -731,7 +757,13 @@ async function freezeAttachmentSnapshotInTransaction(
   const attachment = await one(
     target,
     `SELECT attachments.kind, attachments.referenceId,
-        attachments.snapshotVersion
+        attachments.snapshotVersion,
+        EXISTS (
+          SELECT 1 FROM assistant_attachments AS replaced
+          WHERE replaced.messageId = messages.replacesMessageId
+            AND replaced.kind = attachments.kind
+            AND replaced.referenceId = attachments.referenceId
+        ) AS preservedFromReplacement
       FROM assistant_attachments AS attachments
       JOIN assistant_messages AS messages ON messages.id = attachments.messageId
       JOIN assistant_threads AS threads ON threads.id = messages.threadId
@@ -753,6 +785,15 @@ async function freezeAttachmentSnapshotInTransaction(
         "This attachment kind does not support corpus snapshot versions",
       );
     }
+    return null;
+  }
+  // Null on a preserved historical attachment means that no exact corpus
+  // version was available to the source message. Never reinterpret it as
+  // "follow the current head" when the edited branch is executed later.
+  if (
+    existingVersionId === null &&
+    Boolean(attachment.preservedFromReplacement)
+  ) {
     return null;
   }
   const identity = await corpusAttachmentIdentity(target, {
@@ -828,6 +869,123 @@ async function freezeAttachmentSnapshotInTransaction(
     now: sqlTimestamp(),
   });
   return winnerCandidate.versionId;
+}
+
+async function cloneMessageAttachmentsInTransaction(
+  target: AssistantSqlClient | Transaction,
+  input: {
+    ownerId: string;
+    threadId: string;
+    sourceMessageId: string;
+    targetMessageId: string;
+    now: number;
+  },
+): Promise<Set<string>> {
+  const sourceMessage = await one(
+    target,
+    `SELECT messages.id, messages.role
+      FROM assistant_messages AS messages
+      JOIN assistant_threads AS threads ON threads.id = messages.threadId
+      WHERE messages.id = ? AND messages.threadId = ?
+        AND threads.userId = ? AND threads.deletedAt IS NULL LIMIT 1`,
+    [input.sourceMessageId, input.threadId, input.ownerId],
+  );
+  if (!sourceMessage || sourceMessage.role !== "user") {
+    throw new ConversationStoreError(
+      "invalid_state",
+      "Only an owned user message can provide preserved attachments",
+    );
+  }
+  const sourceRows = await execute(target, {
+    sql: `SELECT * FROM assistant_attachments
+      WHERE messageId = ? ORDER BY createdAt, id`,
+    args: [input.sourceMessageId],
+  });
+  const identities = new Set<string>();
+  for (const source of sourceRows.rows as Row[]) {
+    const kind = source.kind as AssistantAttachmentKind;
+    const referenceId = String(source.referenceId);
+    const snapshotVersion = nullString(source.snapshotVersion);
+    assertAttachmentSnapshotInput(kind, snapshotVersion);
+    if (kind === "task") {
+      const frozenFields = [
+        source.frozenPayloadVersion,
+        source.frozenPayloadJson,
+        source.frozenPayloadDigest,
+        source.frozenSourceRevision,
+      ];
+      const hasAnyFrozenField = frozenFields.some(
+        (value) => value !== null && value !== undefined,
+      );
+      if (hasAnyFrozenField && !frozenTaskSnapshotFromRow(source)) {
+        throw new ConversationStoreError(
+          "invalid_state",
+          "The historical task attachment snapshot is incomplete",
+        );
+      }
+    }
+    const attachmentId = newId("aatt");
+    await execute(target, {
+      sql: `INSERT INTO assistant_attachments
+        (id, messageId, kind, referenceId, snapshotVersion,
+         frozenPayloadVersion, frozenPayloadJson, frozenPayloadDigest,
+         frozenSourceRevision, label, fileId, createdAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        attachmentId,
+        input.targetMessageId,
+        kind,
+        referenceId,
+        snapshotVersion,
+        source.frozenPayloadVersion ?? null,
+        source.frozenPayloadJson ?? null,
+        source.frozenPayloadDigest ?? null,
+        source.frozenSourceRevision ?? null,
+        String(source.label),
+        source.fileId ?? null,
+        input.now,
+      ],
+    });
+    const references = await execute(target, {
+      sql: `SELECT * FROM content_version_references
+        WHERE userId = ? AND ownerKind = 'assistant-citation'
+          AND ownerId = ? ORDER BY id`,
+      args: [input.ownerId, String(source.id)],
+    });
+    for (const reference of references.rows as Row[]) {
+      await execute(target, {
+        sql: `INSERT INTO content_version_references (
+            id, userId, ownerKind, ownerId, sourceVersionId, chunkId,
+            locatorSchemaVersion, locatorJson, quotedContentHash,
+            referenceKey, createdAt
+          ) VALUES (?, ?, 'assistant-citation', ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          newId("cref"),
+          input.ownerId,
+          attachmentId,
+          reference.sourceVersionId,
+          reference.chunkId ?? null,
+          reference.locatorSchemaVersion,
+          reference.locatorJson,
+          reference.quotedContentHash ?? null,
+          reference.referenceKey,
+          input.now,
+        ],
+      });
+    }
+    // Repair a missing legacy GC edge only from the already-frozen exact
+    // version. This path never consults the current source head.
+    if (snapshotVersion !== null && attachmentSupportsCorpusSnapshot(kind)) {
+      await freezeAttachmentSnapshotInTransaction(target, {
+        ownerId: input.ownerId,
+        attachmentId,
+        expectedVersionId: snapshotVersion,
+        rejectUnavailableExpectedVersion: true,
+      });
+    }
+    identities.add(attachmentIdentityKey({ kind, referenceId }));
+  }
+  return identities;
 }
 
 async function ownedThread(
@@ -1389,12 +1547,9 @@ export class CoreConversationStore {
     approvalMode?: "read-only" | "confirm-writes" | "auto-reversible";
     forkOnConflict?: boolean;
     replacesMessageId?: string | null;
-    attachments?: Array<{
-      kind: AssistantAttachmentKind;
-      referenceId: string;
-      snapshotVersion?: string | null;
-      label: string;
-    }>;
+    attachments?: AssistantAttachmentInput[];
+    /** Internal edit fence: preserve this message's exact attachment rows. */
+    preserveAttachmentsFromMessageId?: string;
     skillId?: string | null;
     planMode?: boolean;
     workspaceSnapshotRef?: string | null;
@@ -1567,7 +1722,34 @@ export class CoreConversationStore {
           now,
         ],
       });
+      const attachmentIdentities = input.preserveAttachmentsFromMessageId
+        ? await cloneMessageAttachmentsInTransaction(transaction, {
+            ownerId: input.ownerId,
+            threadId: input.threadId,
+            sourceMessageId: input.preserveAttachmentsFromMessageId,
+            targetMessageId: messageId,
+            now,
+          })
+        : new Set<string>();
+      if (attachmentIdentities.size > MAX_ASSISTANT_MESSAGE_ATTACHMENTS) {
+        throw new ConversationStoreError(
+          "invalid_state",
+          "A message cannot contain more than 50 attachments",
+        );
+      }
       for (const attachment of input.attachments ?? []) {
+        const identity = attachmentIdentityKey(attachment);
+        // The historical attachment wins when an edit explicitly reattaches
+        // the same domain reference. This deduplicates without ever replacing
+        // its immutable snapshot with a newer client-supplied version.
+        if (attachmentIdentities.has(identity)) continue;
+        if (attachmentIdentities.size >= MAX_ASSISTANT_MESSAGE_ATTACHMENTS) {
+          throw new ConversationStoreError(
+            "invalid_state",
+            "A message cannot contain more than 50 attachments",
+          );
+        }
+        attachmentIdentities.add(identity);
         assertAttachmentSnapshotInput(
           attachment.kind,
           attachment.snapshotVersion,
@@ -1814,6 +1996,7 @@ export class CoreConversationStore {
     approvalMode?: "read-only" | "confirm-writes" | "auto-reversible";
     destinationBranchId?: string;
     workspaceSnapshotRef?: string | null;
+    attachments?: AssistantAttachmentInput[];
   }): Promise<EditedMessageProjection> {
     const row = await one(
       this.client,
@@ -1839,6 +2022,8 @@ export class CoreConversationStore {
           providerKey: input.providerKey,
           modelPolicy: input.modelPolicy,
           approvalMode: input.approvalMode,
+          attachments: input.attachments,
+          preserveAttachmentsFromMessageId: input.messageId,
           replacesMessageId: input.messageId,
           workspaceSnapshotRef: input.workspaceSnapshotRef ?? null,
           createBranch: {

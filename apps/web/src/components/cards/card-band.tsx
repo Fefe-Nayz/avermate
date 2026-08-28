@@ -113,34 +113,36 @@ export function CardBand({
           }
         ),
       ],
-      x: {
-        scale: scaleLinear().domain([0, Math.max(1, points.length - 1)]),
-        grid: false,
-        axis: {
-          line: false,
-          ticks: {
-            size: 0,
-            padding: 6,
-            // Assessments ahead, not dates: the band is built per further result, and
-            // dating them would claim a calendar the estimate does not have.
-            format: (value: number) =>
-              value === 0 ? t("now") : `+${format.number(value)}`,
+      scales: {
+        x: {
+          scale: scaleLinear().domain([0, Math.max(1, points.length - 1)]),
+          grid: false,
+          axis: {
+            line: false,
+            ticks: {
+              size: 0,
+              padding: 6,
+              // Assessments ahead, not dates: the band is built per further result, and
+              // dating them would claim a calendar the estimate does not have.
+              format: (value: number) =>
+                value === 0 ? t("now") : `+${format.number(value)}`,
+            },
+            tickLabels: { fontSize: 10 },
           },
-          tickLabels: { fontSize: 10 },
         },
-      },
-      y: {
-        scale: scaleLinear().domain([lowest, highest]),
-        grid: true,
-        axis: {
-          line: false,
-          ticks: {
-            size: 0,
-            padding: 6,
-            format: (value: number) =>
-              format.number(value * scale, { maximumFractionDigits: 0 }),
+        y: {
+          scale: scaleLinear().domain([lowest, highest]),
+          grid: true,
+          axis: {
+            line: false,
+            ticks: {
+              size: 0,
+              padding: 6,
+              format: (value: number) =>
+                format.number(value * scale, { maximumFractionDigits: 0 }),
+            },
+            tickLabels: { fontSize: 10 },
           },
-          tickLabels: { fontSize: 10 },
         },
       },
       clip: true,

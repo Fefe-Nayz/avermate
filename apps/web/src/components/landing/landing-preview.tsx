@@ -98,15 +98,17 @@ function LandingSparkline({
         strokeWidth: 2,
       }),
     ],
-    x: {
-      scale: scaleLinear().domain([xMinimum, xMaximum]),
-      grid: false,
-      axis: false,
-    },
-    y: {
-      scale: scaleLinear().domain([yMinimum - yPadding, yMaximum + yPadding]),
-      grid: false,
-      axis: false,
+    scales: {
+      x: {
+        scale: scaleLinear().domain([xMinimum, xMaximum]),
+        grid: false,
+        axis: false,
+      },
+      y: {
+        scale: scaleLinear().domain([yMinimum - yPadding, yMaximum + yPadding]),
+        grid: false,
+        axis: false,
+      },
     },
     gradients: [
       {

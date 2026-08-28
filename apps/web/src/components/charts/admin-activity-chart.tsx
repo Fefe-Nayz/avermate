@@ -133,31 +133,33 @@ export function AdminActivityChart({
             ],
           }),
         ],
-        x: {
-          scale: scaleLinear().domain(prepared.domain),
-          viewport: { domain: viewport },
-          grid: false,
-          axis: {
-            line: false,
-            ticks: {
-              padding: 6,
-              format: (value) =>
-                format.dateTime(new Date(value), {
-                  day: "numeric",
-                  month: "short",
-                  timeZone: "UTC",
-                }),
-            },
-            tickLabels: {
-              fontSize: 10,
-              thin: { minGap: 30, priority: "ends" },
+        scales: {
+          x: {
+            scale: scaleLinear().domain(prepared.domain),
+            viewport: { domain: viewport },
+            grid: false,
+            axis: {
+              line: false,
+              ticks: {
+                padding: 6,
+                format: (value) =>
+                  format.dateTime(new Date(value), {
+                    day: "numeric",
+                    month: "short",
+                    timeZone: "UTC",
+                  }),
+              },
+              tickLabels: {
+                fontSize: 10,
+                thin: { minGap: 30, priority: "ends" },
+              },
             },
           },
-        },
-        y: {
-          scale: scaleLinear().domain([0, prepared.maximum]),
-          grid: false,
-          axis: false,
+          y: {
+            scale: scaleLinear().domain([0, prepared.maximum]),
+            grid: false,
+            axis: false,
+          },
         },
         clip: true,
         focus,

@@ -854,7 +854,7 @@ describe("ÉcoleDirecte provider", () => {
         "/v3/connexion/doubleauth.awp",
         "/v3/login.awp",
       ]);
-      expect(requests[2]?.headers.get("x-token")).toBe("challenge-x-token");
+      expect(requests[2]?.headers.get("x-token")).toBeNull();
       expect(requests[2]?.headers.get("2fa-token")).toBe("transport-2fa-token");
       expect(requests[3]?.data).toEqual({
         choix: Buffer.from("Chien").toString("base64"),

@@ -269,24 +269,26 @@ export function CardScatter({
               ]
             : []),
         ],
-        x: {
-          scale: scaleLinear().domain(xs.length > 0 ? domainOf(xs) : [0, 1]),
-          grid: visualization.axes.x.grid,
-          axis: {
-            line: false,
-            label: visualization.axes.x.label ?? labels[0],
-            ticks: { size: 0, padding: 6, format: formatX },
-            tickLabels: { fontSize: 10 },
+        scales: {
+          x: {
+            scale: scaleLinear().domain(xs.length > 0 ? domainOf(xs) : [0, 1]),
+            grid: visualization.axes.x.grid,
+            axis: {
+              line: false,
+              label: visualization.axes.x.label ?? labels[0],
+              ticks: { size: 0, padding: 6, format: formatX },
+              tickLabels: { fontSize: 10 },
+            },
           },
-        },
-        y: {
-          scale: scaleLinear().domain(ys.length > 0 ? domainOf(ys) : [0, 1]),
-          grid: visualization.axes.y.grid,
-          axis: {
-            line: false,
-            label: visualization.axes.y.label ?? labels[1],
-            ticks: { size: 0, padding: 6, format: formatY },
-            tickLabels: { fontSize: 10 },
+          y: {
+            scale: scaleLinear().domain(ys.length > 0 ? domainOf(ys) : [0, 1]),
+            grid: visualization.axes.y.grid,
+            axis: {
+              line: false,
+              label: visualization.axes.y.label ?? labels[1],
+              ticks: { size: 0, padding: 6, format: formatY },
+              tickLabels: { fontSize: 10 },
+            },
           },
         },
         clip: true,

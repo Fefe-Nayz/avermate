@@ -20,13 +20,15 @@ function chartDefinition() {
         y: "value",
       }),
     ],
-    x: {
-      scale: scaleLinear().domain([0, 1]),
-      axis: { ticks: { count: 3, padding: 8 } },
-    },
-    y: {
-      scale: scaleLinear().domain([0, 10]),
-      axis: { ticks: { count: 3, padding: 8 } },
+    scales: {
+      x: {
+        scale: scaleLinear().domain([0, 1]),
+        axis: { ticks: { count: 3, padding: 8 } },
+      },
+      y: {
+        scale: scaleLinear().domain([0, 10]),
+        axis: { ticks: { count: 3, padding: 8 } },
+      },
     },
     focus: false,
     keyboard: false,

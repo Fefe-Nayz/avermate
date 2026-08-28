@@ -135,30 +135,32 @@ export function CardStrip({
           r: tick / 2,
         }),
       ],
-      x: {
-        // The whole scale, never the data's own range: see the note above.
-        scale: scaleLinear().domain([0, 1]),
-        grid: false,
-        axis: {
-          line: false,
-          // The format belongs to the ticks, not to the axis: on the axis it was
-          // ignored and the strip read "0.0 … 1.0" — ratios, which nobody writes
-          // on a paper.
-          ticks: {
-            size: 0,
-            padding: 6,
-            format: (value: number) =>
-              format.number(value * scale, { maximumFractionDigits: 0 }),
+      scales: {
+        x: {
+          // The whole scale, never the data's own range: see the note above.
+          scale: scaleLinear().domain([0, 1]),
+          grid: false,
+          axis: {
+            line: false,
+            // The format belongs to the ticks, not to the axis: on the axis it was
+            // ignored and the strip read "0.0 … 1.0" — ratios, which nobody writes
+            // on a paper.
+            ticks: {
+              size: 0,
+              padding: 6,
+              format: (value: number) =>
+                format.number(value * scale, { maximumFractionDigits: 0 }),
+            },
+            tickLabels: { fontSize: 10 },
           },
-          tickLabels: { fontSize: 10 },
         },
-      },
-      y: {
-        // One row per stack, plus half a row of air so the top tick is not
-        // clipped by the plot's own edge.
-        scale: scaleLinear().domain([-0.5, rows - 0.5]),
-        grid: false,
-        axis: false,
+        y: {
+          // One row per stack, plus half a row of air so the top tick is not
+          // clipped by the plot's own edge.
+          scale: scaleLinear().domain([-0.5, rows - 0.5]),
+          grid: false,
+          axis: false,
+        },
       },
       clip: true,
       focus: "nearest",

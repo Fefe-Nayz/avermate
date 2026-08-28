@@ -194,40 +194,42 @@ export function CardRegression({
             ]
           : []),
       ],
-      x: {
-        scale: scaleLinear().domain([
-          points[0]?.x ?? 0,
-          points[points.length - 1]?.x ?? 1,
-        ]),
-        grid: false,
-        axis: visualization.axes.x.visible
-          ? {
-              line: false,
-              ticks: {
-                size: 0,
-                padding: 6,
-                format: (value: number) =>
-                  temporal
-                    ? format.dateTime(new Date(value), {
-                        day: "numeric",
-                        month: "short",
-                      })
-                    : (points[Math.round(value)]?.label ?? ""),
-              },
-              tickLabels: { fontSize: 10 },
-            }
-          : false,
-      },
-      y: {
-        scale: scaleLinear().domain([lowest, highest]),
-        grid: visualization.axes.y.grid,
-        axis: visualization.axes.y.visible
-          ? {
-              line: false,
-              ticks: { size: 0, padding: 6, format: mark },
-              tickLabels: { fontSize: 10 },
-            }
-          : false,
+      scales: {
+        x: {
+          scale: scaleLinear().domain([
+            points[0]?.x ?? 0,
+            points[points.length - 1]?.x ?? 1,
+          ]),
+          grid: false,
+          axis: visualization.axes.x.visible
+            ? {
+                line: false,
+                ticks: {
+                  size: 0,
+                  padding: 6,
+                  format: (value: number) =>
+                    temporal
+                      ? format.dateTime(new Date(value), {
+                          day: "numeric",
+                          month: "short",
+                        })
+                      : (points[Math.round(value)]?.label ?? ""),
+                },
+                tickLabels: { fontSize: 10 },
+              }
+            : false,
+        },
+        y: {
+          scale: scaleLinear().domain([lowest, highest]),
+          grid: visualization.axes.y.grid,
+          axis: visualization.axes.y.visible
+            ? {
+                line: false,
+                ticks: { size: 0, padding: 6, format: mark },
+                tickLabels: { fontSize: 10 },
+              }
+            : false,
+        },
       },
       clip: true,
       focus: "nearest",

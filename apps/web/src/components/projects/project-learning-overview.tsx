@@ -271,11 +271,11 @@ export function ProjectLearningOverview({
         <div className="flex min-w-0 flex-col gap-2">
           <div>
             <h2 id="project-learning-title" className="font-medium">
-              {t("Learning in this project")}
+              {t("Progress in this subject")}
             </h2>
             <p className="text-sm text-pretty text-muted-foreground">
               {t(
-                "A read-only view of the same objectives, evidence and plan managed in Learning."
+                "This read-only view is shared by projects linked to the same academic year and subject."
               )}
             </p>
           </div>

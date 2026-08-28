@@ -136,6 +136,55 @@ async function publishLexicalVersion(input: {
   });
 }
 
+async function commitAttachmentVersion(input: {
+  sourceId: string;
+  originId: string;
+  text: string;
+  previousVersionId?: string | null;
+}) {
+  const corpus = new CoreCorpusStore(client);
+  const identity: OwnedSourceIdentity = {
+    ownerId: "corpus-user-a",
+    originKind: "subject",
+    originId: input.originId,
+  };
+  const chunks: StagedContentChunk[] = [
+    {
+      ordinal: 0,
+      text: input.text,
+      normalizedText: normalizeForSearch(input.text),
+      tokenEstimate: Math.ceil(input.text.length / 4),
+      contentHash: sha256(input.text),
+      locator: { kind: "text", startOffset: 0, endOffset: input.text.length },
+      headingPath: null,
+      evidenceKind: "native-text",
+    },
+  ];
+  const staged = await corpus.stageVersion({
+    identity,
+    sourceId: input.sourceId,
+    versionKey: `edit-attachment-${newId("version")}`,
+    contentHash: sha256(input.text),
+    extractorId: "edit-attachment-test",
+    extractorVersion: "1",
+    mimeType: "text/plain",
+    language: "fr",
+    byteSize: input.text.length,
+    locatorSchemaVersion: 1,
+    metadata: {},
+    chunks,
+  });
+  return {
+    corpus,
+    committed: await corpus.commitVersion({
+      ownerId: identity.ownerId,
+      stagingId: staged.stagingId,
+      expectedSourceId: input.sourceId,
+      expectedPreviousVersionId: input.previousVersionId ?? null,
+    }),
+  };
+}
+
 function usage() {
   return {
     providerKey: "mock",
@@ -379,6 +428,356 @@ describe("CoreConversationStore DAG, CAS and idempotency", () => {
       ]),
     );
     expect(detail.branches.length).toBe(3);
+  });
+
+  test("edits clone exact corpus and task snapshots, merge additions, retain GC edges and replay idempotently", async () => {
+    const ownerId = "corpus-user-a";
+    const now = Math.floor(Date.now() / 1_000);
+    const subjectId = `subject-${newId("edit-snapshot")}`;
+    const sourceId = `source-${newId("edit-snapshot")}`;
+    const addedSubjectId = `subject-${newId("edit-added")}`;
+    const addedSourceId = `source-${newId("edit-added")}`;
+    const taskId = `ptask-${newId("edit-snapshot")}`;
+    for (const [id, name] of [
+      [subjectId, "Snapshot original"],
+      [addedSubjectId, "Snapshot ajouté"],
+    ] as const) {
+      await client.execute({
+        sql: `INSERT INTO subjects (
+            id, name, coefficient, kind, isMain, bonus, sortOrder,
+            yearId, userId, createdAt, updatedAt
+          ) VALUES (?, ?, 1, 'subject', 1, 0, 0, ?, ?, ?, ?)`,
+        args: [id, name, "corpus-year-a", ownerId, now, now],
+      });
+    }
+    await seedSource(client, {
+      id: sourceId,
+      originId: subjectId,
+      subjectId,
+    });
+    await seedSource(client, {
+      id: addedSourceId,
+      originId: addedSubjectId,
+      subjectId: addedSubjectId,
+    });
+    await client.execute({
+      sql: `INSERT INTO planning_tasks (
+          id, title, notes, localNote, status, sortOrder, revision,
+          yearId, userId, syncState, createdAt, updatedAt
+        ) VALUES (?, 'Tâche version 4', 'Preuve figée', NULL, 'todo', 0, 4,
+          ?, ?, 'detached', ?, ?)`,
+      args: [taskId, "corpus-year-a", ownerId, now, now],
+    });
+    const versionN = await commitAttachmentVersion({
+      sourceId,
+      originId: subjectId,
+      text: "Version N historique",
+    });
+    const addedVersion = await commitAttachmentVersion({
+      sourceId: addedSourceId,
+      originId: addedSubjectId,
+      text: "Source ajoutée pendant l'édition",
+    });
+    const created = await thread(ownerId);
+    const original = await store.reserveTurn({
+      ownerId,
+      threadId: created.thread.id,
+      branchId: created.branch.id,
+      expectedHeadMessageId: null,
+      clientRequestId: `edit-snapshot-original-${newId("request")}`,
+      markdown: "Question originale",
+      modelKey: "mock-readonly",
+      attachments: [
+        {
+          kind: "subject",
+          referenceId: subjectId,
+          snapshotVersion: versionN.committed.versionId,
+          label: "Snapshot original",
+        },
+        {
+          kind: "task",
+          referenceId: taskId,
+          label: "Tâche version 4",
+        },
+      ],
+    });
+    const versionN1 = await commitAttachmentVersion({
+      sourceId,
+      originId: subjectId,
+      text: "Version N+1 courante",
+      previousVersionId: versionN.committed.versionId,
+    });
+    await client.execute({
+      sql: `UPDATE planning_tasks SET title = 'Tâche version 5', revision = 5,
+        updatedAt = ? WHERE id = ? AND userId = ?`,
+      args: [now + 1, taskId, ownerId],
+    });
+    const requestId = `edit-snapshot-${newId("request")}`;
+    const edited = await store.editMessage({
+      ownerId,
+      messageId: original.userMessageId,
+      clientRequestId: requestId,
+      markdown: "Question modifiée",
+      modelKey: "mock-readonly",
+      attachments: [
+        {
+          kind: "subject",
+          referenceId: subjectId,
+          snapshotVersion: versionN1.committed.versionId,
+          label: "Tentative de remplacement",
+        },
+        {
+          kind: "subject",
+          referenceId: addedSubjectId,
+          snapshotVersion: addedVersion.committed.versionId,
+          label: "Snapshot ajouté",
+        },
+      ],
+    });
+    if (edited.kind !== "run-reserved") {
+      throw new Error("Expected an edited user run");
+    }
+    const clonedRows = await client.execute({
+      sql: `SELECT * FROM assistant_attachments WHERE messageId = ?
+        ORDER BY kind, referenceId`,
+      args: [edited.reservation.userMessageId],
+    });
+    expect(clonedRows.rows).toHaveLength(3);
+    const clonedOriginal = clonedRows.rows.find(
+      (row) => row.kind === "subject" && row.referenceId === subjectId,
+    )!;
+    const clonedTask = clonedRows.rows.find((row) => row.kind === "task")!;
+    const sourceRows = await client.execute({
+      sql: `SELECT * FROM assistant_attachments WHERE messageId = ?
+        ORDER BY kind, referenceId`,
+      args: [original.userMessageId],
+    });
+    const sourceOriginal = sourceRows.rows.find(
+      (row) => row.kind === "subject" && row.referenceId === subjectId,
+    )!;
+    const sourceTask = sourceRows.rows.find((row) => row.kind === "task")!;
+    expect(clonedOriginal.id).not.toBe(sourceOriginal.id);
+    expect(clonedOriginal.snapshotVersion).toBe(versionN.committed.versionId);
+    expect(clonedOriginal.label).toBe("Snapshot original");
+    expect(clonedTask.id).not.toBe(sourceTask.id);
+    expect(clonedTask.frozenPayloadVersion).toBe(
+      sourceTask.frozenPayloadVersion,
+    );
+    expect(clonedTask.frozenPayloadDigest).toBe(sourceTask.frozenPayloadDigest);
+    expect(clonedTask.frozenSourceRevision).toBe(4);
+    expect(clonedTask.frozenPayloadJson).toBe(sourceTask.frozenPayloadJson);
+    const clonedReference = await client.execute({
+      sql: `SELECT sourceVersionId FROM content_version_references
+        WHERE ownerKind = 'assistant-citation' AND ownerId = ?`,
+      args: [String(clonedOriginal.id)],
+    });
+    expect(clonedReference.rows.map((row) => row.sourceVersionId)).toEqual([
+      versionN.committed.versionId,
+    ]);
+
+    const replay = await store.editMessage({
+      ownerId,
+      messageId: original.userMessageId,
+      clientRequestId: requestId,
+      markdown: "Question modifiée",
+      modelKey: "mock-readonly",
+      attachments: [],
+    });
+    expect(replay).toEqual({
+      kind: "run-reserved",
+      reservation: { ...edited.reservation, idempotent: true },
+    });
+    const replayRows = await client.execute({
+      sql: `SELECT count(*) AS count FROM assistant_attachments
+        WHERE messageId = ?`,
+      args: [edited.reservation.userMessageId],
+    });
+    expect(Number(replayRows.rows[0]?.count)).toBe(3);
+
+    // Remove the source message's edge to prove that the clone itself keeps N
+    // reachable until the whole conversation is retention-purged.
+    await client.execute({
+      sql: `DELETE FROM content_version_references
+        WHERE ownerKind = 'assistant-citation' AND ownerId = ?`,
+      args: [String(sourceOriginal.id)],
+    });
+    await versionN.corpus.markVersionForGc(versionN.committed.versionId);
+    expect(
+      (await versionN.corpus.collectGarbage()).deletedVersionIds,
+    ).not.toContain(versionN.committed.versionId);
+    const detail = await store.getThreadDetail(ownerId, created.thread.id);
+    const trashed = await store.trashThread({
+      ownerId,
+      threadId: created.thread.id,
+      expectedRevision: detail.thread.revision,
+      retentionDays: 1,
+    });
+    await client.execute({
+      sql: `UPDATE assistant_threads SET purgeAfter = 0 WHERE id = ?`,
+      args: [trashed.id],
+    });
+    expect(await store.purgeExpired(ownerId)).toContain(created.thread.id);
+    expect(
+      (await versionN.corpus.collectGarbage()).deletedVersionIds,
+    ).toContain(versionN.committed.versionId);
+  });
+
+  test("edited legacy attachments without snapshots stay unavailable instead of following current state", async () => {
+    const ownerId = "corpus-user-a";
+    const now = Math.floor(Date.now() / 1_000);
+    const subjectId = `subject-${newId("edit-legacy")}`;
+    const sourceId = `source-${newId("edit-legacy")}`;
+    const taskId = `ptask-${newId("edit-legacy")}`;
+    await client.execute({
+      sql: `INSERT INTO subjects (
+          id, name, coefficient, kind, isMain, bonus, sortOrder,
+          yearId, userId, createdAt, updatedAt
+        ) VALUES (?, 'Legacy edit', 1, 'subject', 1, 0, 0, ?, ?, ?, ?)`,
+      args: [subjectId, "corpus-year-a", ownerId, now, now],
+    });
+    await seedSource(client, { id: sourceId, originId: subjectId, subjectId });
+    await client.execute({
+      sql: `INSERT INTO planning_tasks (
+          id, title, status, sortOrder, revision, yearId, userId, syncState,
+          createdAt, updatedAt
+        ) VALUES (?, 'Legacy tâche', 'todo', 0, 1, ?, ?, 'detached', ?, ?)`,
+      args: [taskId, "corpus-year-a", ownerId, now, now],
+    });
+    const created = await thread(ownerId);
+    const original = await store.reserveTurn({
+      ownerId,
+      threadId: created.thread.id,
+      branchId: created.branch.id,
+      expectedHeadMessageId: null,
+      clientRequestId: `edit-legacy-original-${newId("request")}`,
+      markdown: "Avant indexation",
+      modelKey: "mock-readonly",
+      attachments: [
+        { kind: "subject", referenceId: subjectId, label: "Legacy edit" },
+        { kind: "task", referenceId: taskId, label: "Legacy tâche" },
+      ],
+    });
+    await client.execute({
+      sql: `UPDATE assistant_attachments SET frozenPayloadVersion = NULL,
+        frozenPayloadJson = NULL, frozenPayloadDigest = NULL,
+        frozenSourceRevision = NULL
+        WHERE messageId = ? AND kind = 'task'`,
+      args: [original.userMessageId],
+    });
+    const current = await commitAttachmentVersion({
+      sourceId,
+      originId: subjectId,
+      text: "Version devenue courante après le message",
+    });
+    await client.execute({
+      sql: `UPDATE planning_tasks SET title = 'État courant interdit',
+        revision = 2, updatedAt = ? WHERE id = ? AND userId = ?`,
+      args: [now + 1, taskId, ownerId],
+    });
+    const edited = await store.editMessage({
+      ownerId,
+      messageId: original.userMessageId,
+      clientRequestId: `edit-legacy-${newId("request")}`,
+      markdown: "Après édition",
+      modelKey: "mock-readonly",
+    });
+    if (edited.kind !== "run-reserved") throw new Error("Expected user edit");
+    const cloned = await client.execute({
+      sql: `SELECT * FROM assistant_attachments WHERE messageId = ?`,
+      args: [edited.reservation.userMessageId],
+    });
+    const corpusAttachment = cloned.rows.find((row) => row.kind === "subject")!;
+    const taskAttachment = cloned.rows.find((row) => row.kind === "task")!;
+    expect(corpusAttachment.snapshotVersion).toBeNull();
+    expect(
+      await store.freezeAttachmentSnapshot({
+        ownerId,
+        attachmentId: String(corpusAttachment.id),
+        expectedVersionId: current.committed.versionId,
+      }),
+    ).toBeNull();
+    expect(
+      await store.freezeTaskAttachmentSnapshot({
+        ownerId,
+        attachmentId: String(taskAttachment.id),
+      }),
+    ).toBeNull();
+    const after = await client.execute({
+      sql: `SELECT snapshotVersion, frozenPayloadJson
+        FROM assistant_attachments WHERE messageId = ?`,
+      args: [edited.reservation.userMessageId],
+    });
+    expect(after.rows.every((row) => row.snapshotVersion === null)).toBe(true);
+    expect(
+      after.rows.find((row) => row.frozenPayloadJson !== null),
+    ).toBeUndefined();
+  });
+
+  test("bounds preserved and newly added edit attachments together", async () => {
+    const ownerId = "corpus-user-a";
+    const now = Math.floor(Date.now() / 1_000);
+    const projectIds = Array.from(
+      { length: 50 },
+      (_, index) => `edit-limit-project-${newId(String(index))}`,
+    );
+    await client.batch(
+      projectIds.map((projectId, index) => ({
+        sql: `INSERT INTO study_projects (
+            id, userId, title, description, contextPolicyVersion,
+            contextPolicyJson, retrievalMode, retrievalFallbackPolicy,
+            createdAt, updatedAt
+          ) VALUES (?, ?, ?, '', 1, ?, 'lexical-only', 'lexical-only', ?, ?)`,
+        args: [
+          projectId,
+          ownerId,
+          `Projet ${index}`,
+          JSON.stringify({
+            sourceSelection: "project-items",
+            extractedInstructionsTrusted: false,
+          }),
+          now,
+          now,
+        ],
+      })),
+      "write",
+    );
+    const created = await thread(ownerId);
+    const original = await store.reserveTurn({
+      ownerId,
+      threadId: created.thread.id,
+      branchId: created.branch.id,
+      expectedHeadMessageId: null,
+      clientRequestId: `edit-limit-original-${newId("request")}`,
+      markdown: "Cinquante références",
+      modelKey: "mock-readonly",
+      attachments: projectIds.map((projectId, index) => ({
+        kind: "project" as const,
+        referenceId: projectId,
+        label: `Projet ${index}`,
+      })),
+    });
+    await expect(
+      store.editMessage({
+        ownerId,
+        messageId: original.userMessageId,
+        clientRequestId: `edit-limit-${newId("request")}`,
+        markdown: "Une référence de trop",
+        modelKey: "mock-readonly",
+        attachments: [
+          {
+            kind: "year",
+            referenceId: "corpus-year-a",
+            label: "Référence supplémentaire",
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: "invalid_state" });
+    const projections = await client.execute({
+      sql: `SELECT count(*) AS count FROM assistant_messages
+        WHERE replacesMessageId = ?`,
+      args: [original.userMessageId],
+    });
+    expect(Number(projections.rows[0]?.count)).toBe(0);
   });
 
   test("isolates owners and validates attachment ownership in the transaction", async () => {
@@ -779,6 +1178,128 @@ describe("RoutedConversationStore crash recovery", () => {
     if (pendingRun.rows[0]) {
       await routed.cancelRun("corpus-user-a", String(pendingRun.rows[0].id));
     }
+  });
+
+  test("preserves edited attachments in Node snapshots without re-reading a mutable task", async () => {
+    const ownerId = "corpus-user-a";
+    const taskId = `ptask-${newId("node-edit")}`;
+    const now = Math.floor(Date.now() / 1_000);
+    await client.execute({
+      sql: `INSERT INTO planning_tasks (
+          id, title, notes, status, sortOrder, revision, yearId, userId,
+          syncState, createdAt, updatedAt
+        ) VALUES (?, 'Node task revision 7', 'Immutable Node payload', 'todo',
+          0, 7, ?, ?, 'detached', ?, ?)`,
+      args: [taskId, "corpus-year-a", ownerId, now, now],
+    });
+    const snapshots = new Map<string, NodeConversationDagSnapshot>();
+    const relay: ConversationDagRelay = {
+      selectedNode: async () => "node-edit-attachments",
+      assertOnline: async () => undefined,
+      import: async (input) => {
+        snapshots.set(
+          input.snapshot.detail.thread.id,
+          structuredClone(input.snapshot),
+        );
+        return input.snapshot;
+      },
+      list: async () => [],
+      get: async ({ threadId }) => {
+        const snapshot = snapshots.get(threadId);
+        return snapshot ? structuredClone(snapshot) : null;
+      },
+      delete: async ({ threadId }) => ({
+        deleted: snapshots.delete(threadId),
+      }),
+    };
+    const routed = new RoutedConversationStore(
+      client,
+      relay,
+      "test-only-node-edit-attachments-secret-000001",
+    );
+    const created = await routed.createThread({
+      ownerId,
+      title: "Node edited attachments",
+      placement: "node",
+    });
+    const original = await routed.reserveTurn({
+      ownerId,
+      threadId: created.thread.id,
+      branchId: created.branch.id,
+      expectedHeadMessageId: null,
+      clientRequestId: `node-edit-original-${newId("request")}`,
+      markdown: "Node original",
+      modelKey: "mock-readonly",
+      attachments: [
+        { kind: "task", referenceId: taskId, label: "Node task revision 7" },
+      ],
+    });
+    await client.execute({
+      sql: `UPDATE planning_tasks SET title = 'Node task revision 8',
+        notes = 'MUTABLE_NODE_STATE', revision = 8, updatedAt = ?
+        WHERE id = ? AND userId = ?`,
+      args: [now + 1, taskId, ownerId],
+    });
+    const requestId = `node-edit-${newId("request")}`;
+    const edited = await routed.editMessage({
+      ownerId,
+      messageId: original.userMessageId,
+      clientRequestId: requestId,
+      markdown: "Node edited",
+      modelKey: "mock-readonly",
+    });
+    if (edited.kind !== "run-reserved") throw new Error("Expected user edit");
+    const durable = await client.execute({
+      sql: `SELECT * FROM assistant_attachments
+        WHERE messageId IN (?, ?) ORDER BY messageId`,
+      args: [original.userMessageId, edited.reservation.userMessageId],
+    });
+    expect(durable.rows).toHaveLength(2);
+    expect(durable.rows[0]?.id).not.toBe(durable.rows[1]?.id);
+    expect(durable.rows[0]?.frozenPayloadDigest).toBe(
+      durable.rows[1]?.frozenPayloadDigest,
+    );
+    expect(durable.rows[1]?.frozenSourceRevision).toBe(7);
+    expect(String(durable.rows[1]?.frozenPayloadJson)).not.toContain(
+      "MUTABLE_NODE_STATE",
+    );
+    const remote = snapshots.get(created.thread.id)!;
+    expect(
+      remote.detail.attachments.filter(
+        (attachment) => attachment.referenceId === taskId,
+      ),
+    ).toHaveLength(2);
+    expect(
+      remote.detail.attachments.find(
+        (attachment) =>
+          attachment.messageId === edited.reservation.userMessageId,
+      )?.id,
+    ).not.toBe(
+      remote.detail.attachments.find(
+        (attachment) => attachment.messageId === original.userMessageId,
+      )?.id,
+    );
+
+    const replay = await routed.editMessage({
+      ownerId,
+      messageId: original.userMessageId,
+      clientRequestId: requestId,
+      markdown: "Node edited",
+      modelKey: "mock-readonly",
+    });
+    expect(replay).toEqual({
+      kind: "run-reserved",
+      reservation: { ...edited.reservation, idempotent: true },
+    });
+    expect(
+      snapshots
+        .get(created.thread.id)!
+        .detail.attachments.filter(
+          (attachment) => attachment.referenceId === taskId,
+        ),
+    ).toHaveLength(2);
+    await routed.cancelRun(ownerId, original.runId);
+    await routed.cancelRun(ownerId, edited.reservation.runId);
   });
 
   test("syncs a post-index attachment freeze to Node and reconciles an interrupted relay write", async () => {

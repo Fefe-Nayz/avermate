@@ -14,6 +14,7 @@ import {
   barY,
   dot,
   group,
+  link as chartLink,
   lineY,
   ruleX,
   ruleY,
@@ -2729,11 +2730,12 @@ function WidgetSeriesChart({
         return [
           ...(horizontal
             ? [
-                ruleY(plotted, {
+                chartLink(plotted, {
                   id: "widget-lollipop-stems",
-                  y: "x",
-                  x1: domain[0],
+                  x1: () => domain[0],
+                  y1: "x",
                   x2: "y",
+                  y2: "x",
                   key: "key",
                   ...constantStroke,
                   strokeWidth: 2,
@@ -2741,10 +2743,11 @@ function WidgetSeriesChart({
                 }),
               ]
             : [
-                ruleX(plotted, {
+                chartLink(plotted, {
                   id: "widget-lollipop-stems",
-                  x: "x",
-                  y1: domain[0],
+                  x1: "x",
+                  y1: () => domain[0],
+                  x2: "x",
                   y2: "y",
                   key: "key",
                   ...constantStroke,
@@ -2796,11 +2799,12 @@ function WidgetSeriesChart({
         const rising = moved.filter((item) => item.delta >= 0)
         const falling = moved.filter((item) => item.delta < 0)
         const shaft = (data: typeof moved, id: string, color: string) =>
-          ruleY(data, {
+          chartLink(data, {
             id,
-            y: "x",
             x1: "from",
+            y1: "x",
             x2: "y",
+            y2: "x",
             key: "key",
             stroke: color,
             strokeWidth: 2,
@@ -2918,11 +2922,12 @@ function WidgetSeriesChart({
             ? visualization.options.size / 2
             : 5
         return [
-          ruleY(paired, {
+          chartLink(paired, {
             id: "widget-dumbbell-bars",
-            y: "x",
             x1: "from",
+            y1: "x",
             x2: "y",
+            y2: "x",
             key: "key",
             stroke: "var(--muted-foreground)",
             strokeWidth: 2,
@@ -3095,98 +3100,101 @@ function WidgetSeriesChart({
        */
       chart: ({ width }: { width: number }) => ({
         marks: [...marks, ...thresholds],
-        x: horizontal
-          ? {
-              scale: scaleLinear().domain(domain),
-              reverse: visualization.scale.y.reverse,
-              grid: visualization.axes.y.grid,
-              axis: visualization.axes.y.visible
-                ? { label: visualization.axes.y.label ?? undefined }
-                : false,
-            }
-          : {
-              /**
-               * A bar takes its thickness from a band, so a bar chart gets one.
-               *
-               * `barY` has no width option: the thickness comes from the band layout, and
-               * on a linear scale there is no band — measured on the bench, twenty-three
-               * weekly bars with correct *heights* and a width of zero, which is a chart
-               * that draws its data and shows nothing. Every bar card over a time axis was
-               * blank, including the cumulative one and the stacked one.
-               *
-               * A band is also the truer statement: a bar over a week occupies the week,
-               * where a line's point marks the instant it was read at.
-               */
-              scale:
-                (temporal || numericX) && !banded
-                  ? scaleLinear().domain(xDomain)
-                  : scaleBand<string | number>()
-                      .domain(categoryDomain)
-                      .padding(0.12),
-              grid: visualization.axes.x.grid,
-              reverse: visualization.scale.x.reverse,
-              axis: visualization.axes.x.visible
-                ? {
-                    line: false,
-                    label: visualization.axes.x.label ?? undefined,
-                    ticks: temporal
-                      ? {
-                          // Banded, the tick *is* the bucket's timestamp as a string —
-                          // the band's own domain value — so it is read back before it is
-                          // formatted rather than being printed as a number of
-                          // milliseconds.
-                          format: (value: number | string) =>
-                            format.dateTime(new Date(Number(value)), {
-                              day: "numeric",
-                              month: "short",
-                            }),
-                        }
-                      : {
-                          size: 0,
-                          /**
-                           * Names under the chart, cut to the same share as names beside
-                           * it — see `axisNameAtWidth`.
-                           *
-                           * The renderer thins labels that collide, but it still reserves
-                           * room for the *widest* one, and one 68-character subject name
-                           * pushed the plot to x = 176 of a 228px card: six bands 0.16px
-                           * wide, six bars of no width, and a chart that drew its data and
-                           * showed nothing. Measured on the bench.
-                           */
-                          format: (value: number | string) =>
-                            axisNameAtWidth(String(value), width),
-                        },
-                  }
-                : false,
-            },
-        y: horizontal
-          ? {
-              scale: scaleBand<string | number>()
-                .domain(categoryDomain)
-                .padding(0.12),
-              grid: false,
-              reverse: visualization.scale.x.reverse,
-              axis: visualization.axes.x.visible
-                ? {
-                    label: visualization.axes.x.label ?? undefined,
-                    // Names down the left of a sideways chart, cut to their share of the
-                    // card — see `axisNameAtWidth`. Unbudgeted, one long subject name
-                    // reserved more width than the card had and every bar was drawn a pixel
-                    // wide beyond the right edge.
-                    ticks: {
-                      format: (label: string) => axisNameAtWidth(label, width),
-                    },
-                  }
-                : false,
-            }
-          : {
-              scale: scaleLinear().domain(domain),
-              grid: visualization.axes.y.grid,
-              reverse: visualization.scale.y.reverse,
-              axis: visualization.axes.y.visible
-                ? { label: visualization.axes.y.label ?? undefined }
-                : false,
-            },
+        scales: {
+          x: horizontal
+            ? {
+                scale: scaleLinear().domain(domain),
+                reverse: visualization.scale.y.reverse,
+                grid: visualization.axes.y.grid,
+                axis: visualization.axes.y.visible
+                  ? { label: visualization.axes.y.label ?? undefined }
+                  : false,
+              }
+            : {
+                /**
+                 * A bar takes its thickness from a band, so a bar chart gets one.
+                 *
+                 * `barY` has no width option: the thickness comes from the band layout, and
+                 * on a linear scale there is no band — measured on the bench, twenty-three
+                 * weekly bars with correct *heights* and a width of zero, which is a chart
+                 * that draws its data and shows nothing. Every bar card over a time axis was
+                 * blank, including the cumulative one and the stacked one.
+                 *
+                 * A band is also the truer statement: a bar over a week occupies the week,
+                 * where a line's point marks the instant it was read at.
+                 */
+                scale:
+                  (temporal || numericX) && !banded
+                    ? scaleLinear().domain(xDomain)
+                    : scaleBand<string | number>()
+                        .domain(categoryDomain)
+                        .padding(0.12),
+                grid: visualization.axes.x.grid,
+                reverse: visualization.scale.x.reverse,
+                axis: visualization.axes.x.visible
+                  ? {
+                      line: false,
+                      label: visualization.axes.x.label ?? undefined,
+                      ticks: temporal
+                        ? {
+                            // Banded, the tick *is* the bucket's timestamp as a string —
+                            // the band's own domain value — so it is read back before it is
+                            // formatted rather than being printed as a number of
+                            // milliseconds.
+                            format: (value: number | string) =>
+                              format.dateTime(new Date(Number(value)), {
+                                day: "numeric",
+                                month: "short",
+                              }),
+                          }
+                        : {
+                            size: 0,
+                            /**
+                             * Names under the chart, cut to the same share as names beside
+                             * it — see `axisNameAtWidth`.
+                             *
+                             * The renderer thins labels that collide, but it still reserves
+                             * room for the *widest* one, and one 68-character subject name
+                             * pushed the plot to x = 176 of a 228px card: six bands 0.16px
+                             * wide, six bars of no width, and a chart that drew its data and
+                             * showed nothing. Measured on the bench.
+                             */
+                            format: (value: number | string) =>
+                              axisNameAtWidth(String(value), width),
+                          },
+                    }
+                  : false,
+              },
+          y: horizontal
+            ? {
+                scale: scaleBand<string | number>()
+                  .domain(categoryDomain)
+                  .padding(0.12),
+                grid: false,
+                reverse: visualization.scale.x.reverse,
+                axis: visualization.axes.x.visible
+                  ? {
+                      label: visualization.axes.x.label ?? undefined,
+                      // Names down the left of a sideways chart, cut to their share of the
+                      // card — see `axisNameAtWidth`. Unbudgeted, one long subject name
+                      // reserved more width than the card had and every bar was drawn a pixel
+                      // wide beyond the right edge.
+                      ticks: {
+                        format: (label: string) =>
+                          axisNameAtWidth(label, width),
+                      },
+                    }
+                  : false,
+              }
+            : {
+                scale: scaleLinear().domain(domain),
+                grid: visualization.axes.y.grid,
+                reverse: visualization.scale.y.reverse,
+                axis: visualization.axes.y.visible
+                  ? { label: visualization.axes.y.label ?? undefined }
+                  : false,
+              },
+        },
         color: hasVisualColor
           ? {
               domain: colorDomain,

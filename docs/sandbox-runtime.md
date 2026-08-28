@@ -1,11 +1,11 @@
 # Sandbox runtime and versioned workspaces
 
-**Implementation status (2026-08-22):** provider-independent contracts,
+**Implementation status (2026-08-28):** provider-independent contracts,
 fail-closed adapters, security policy, deterministic mock conformance, artifact
-adoption, eight versioned structured workers, LaTeX dependency analysis and an
-in-memory snapshot-ledger reference are implemented. **No real execution
-provider or worker image is enabled, attested or proven by this repository
-state.**
+adoption, versioned structured workers, LaTeX dependency analysis, a durable
+SQL snapshot ledger/outbox and durable job-event replay are implemented. **No
+real execution provider or worker image is enabled, attested or proven by this
+repository state.**
 
 This document is the operational truth for plan 031. Application code targets
 one `SandboxProvider`; deployment-specific transports and host probes remain
@@ -170,15 +170,16 @@ configuration; they are not baseline evidence.
 | Conversation checkpoint | Harness state and interrupt continuation | Not a filesystem |
 | Domain cursor | Ordered application mutations/compensations | Not filesystem/harness state |
 
-`InMemorySnapshotLedger` is a contract reference for pending, committed and
-failed transitions, outbox leasing, owner/branch/checkpoint validation,
-idempotency, immutable parent/image/profile fields, portable manifest
-size/count/digest evidence, capture/adopt/publish/GC recovery and orphan
-reconciliation. Only committed, authorized rows are restorable; latest restore
-also requires exact profile/image compatibility. An optional provider runtime
-checkpoint may be attached later only as a compatible accelerator and never
-changes the portable snapshot. The reference is intentionally not restart safe;
-production activation remains blocked on durable persistence.
+`InMemorySnapshotLedger` remains the deterministic contract reference for
+tests. Production uses `CoreSqlSnapshotLedger`, which persists pending,
+committed and failed transitions, outbox leasing, owner/branch/checkpoint
+validation, idempotency, immutable parent/image/profile fields, portable
+manifest size/count/digest evidence, capture/adopt/publish/GC recovery and
+orphan reconciliation. Only committed, authorized rows are restorable; latest
+restore also requires exact profile/image compatibility. An optional provider
+runtime checkpoint may be attached later only as a compatible accelerator and
+never changes the portable snapshot. Production activation remains blocked on
+live provider and isolation evidence, not on snapshot-ledger persistence.
 
 ## Artifact adoption
 
@@ -218,9 +219,10 @@ structured leased/provisioning/running/snapshotting/adopting stages, bounded
 progress/log/usage/heartbeat/cancellation events, ordered replay/streaming and
 queued-only cancellation. Lease loss fences result adoption. `SandboxJobAdmission`
 requires fresh profile/image/host evidence before enqueue, while provider
-creation repeats preflight in the worker. The runtime refuses non-durable stores. The current job table
-can supply queue identity/status, but persistent event replay still needs the
-migration below; no in-memory production fallback is wired.
+creation repeats preflight in the worker. The runtime refuses non-durable
+stores. `job_runtime_metadata` and `job_runtime_events`, introduced by migration
+`0058_small_deathstrike.sql`, provide durable stages and ordered replay; no
+in-memory production fallback is wired.
 
 ## Conformance
 
@@ -246,19 +248,25 @@ divergence for all profiles. It cannot authorize a real runtime. An explicitly
 selected real provider exits non-zero when no enabled profile produces live
 matching evidence or an advertised check fails.
 
-## Persistence work still required
+## Durable persistence now in place
 
-No Drizzle schema or migration was changed by plan 031 while plan 029 owns the
-next migration prefix. Before a real runtime or versioned workspace is enabled,
-a reviewed migration must add at least:
+Plan 031 originally stopped at an in-memory reference because the next migration
+prefix was owned elsewhere. That historical limitation has since been removed.
+Migration `0058_small_deathstrike.sql`, `db/schema/sandbox.ts` and
+`sandbox/sql-snapshot-ledger.ts` now provide:
 
-- immutable workspace-snapshot rows with state, owner/thread/branch/checkpoint
-  fences and uniqueness constraints;
-- transactional snapshot outbox, leases, attempts and reconciliation state;
-- trusted-object/adoption provenance plus orphan cleanup receipts;
-- durable job progress/event rows with `(job, sequence)` and replay indexes;
-- optionally runtime-checkpoint metadata, image proposals/attestations and
-  baseline-evidence audit records with retention policy.
+- immutable workspace-snapshot rows with owner, thread, branch, sequence,
+  checkpoint, execution-profile and image fences;
+- uniqueness constraints for request replay, branch sequence and committed
+  branch checkpoints;
+- a transactional snapshot outbox with durable states, leases, attempts and
+  reconciliation;
+- captured and adopted object provenance, portable manifest digests and
+  terminal-state invariants;
+- runtime-checkpoint metadata that can attach only to an already committed
+  logical snapshot.
 
-The migration needs prefix integration, concurrent idempotency tests and crash
-simulations before any provider activation.
+Provider activation still requires matching live isolation evidence, reviewed
+images and the external conformance gates described above. The existence of the
+SQL ledger proves restart-safe persistence; it does not by itself prove a
+production sandbox deployment.

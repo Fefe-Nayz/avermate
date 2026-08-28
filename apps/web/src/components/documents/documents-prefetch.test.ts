@@ -36,7 +36,7 @@ describe("study document web boundaries", () => {
       "remark-math": "6.0.0",
       "rehype-katex": "7.0.1",
       katex: "0.18.4",
-      "@xyflow/react": "12.11.3",
+      "@xyflow/react": "12.11.5",
     })
   })
 

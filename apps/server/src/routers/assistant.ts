@@ -450,6 +450,9 @@ export const assistantRouter = {
           markdown: z.string().trim().min(1).max(200_000),
           modelKey: id,
           approvalMode: agentApprovalModeSchema.default("read-only"),
+          // Optional additions are merged with the source message's preserved
+          // attachments. Omission by older clients never removes history.
+          attachments: z.array(attachmentInput).max(50).default([]),
           historicalBranch: historicalBranchChoiceSchema,
         }),
       )
