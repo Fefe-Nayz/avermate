@@ -2,17 +2,29 @@ import {
   MAX_NODE_CONTROL_BUFFER_BYTES,
   MAX_NODE_CONTROL_FRAME_BYTES,
   MAX_NODE_STREAM_BUFFER_BYTES,
+  nodeCapabilityEventV1Schema,
+  nodeCapabilityJobManifestV1Schema,
+  nodeCapabilityJobRequestDigestPayload,
+  nodeCapabilityRequestDigestPayload,
+  nodeCapabilityRequestV1Schema,
+  nodeCapabilityResultV1Schema,
   nodeControlFrameSchema,
   nodeJobV1Schema,
   signedNodeCapabilityGrantSchema,
+  signedNodeCapabilityInvocationGrantSchema,
+  type NodeCapabilityEventV1,
   type NodeCapabilityHealth,
   type NodeCapabilityId,
+  type NodeCapabilityJobManifestV1,
+  type NodeCapabilityRequestV1,
+  type NodeCapabilityResultV1,
   type NodeControlFrame,
   type NodeJobEvent,
   type NodeJobV1,
   type SignedNodeCapabilityGrant,
+  type SignedNodeCapabilityInvocationGrant,
 } from "@avermate/agent-contracts";
-import { protocolDigest } from "./protocol-crypto";
+import { canonicalProtocolJson, protocolDigest } from "./protocol-crypto";
 import {
   type AuthenticatedNodeCredential,
   CoreNodeRegistry,
@@ -225,6 +237,37 @@ export type DispatchNodeOperationInput = {
   deadline: string;
   signal?: AbortSignal;
 };
+
+type DispatchNodeCapabilityInput = {
+  userId: string;
+  nodeId: string;
+  operation: "capability.invoke" | "capability.stream" | "capability.artifact-job";
+  request: NodeCapabilityRequestV1 | NodeCapabilityJobManifestV1;
+  grant: SignedNodeCapabilityInvocationGrant;
+  signal?: AbortSignal;
+};
+
+type RelayDispatchInput = Omit<DispatchNodeOperationInput, "grant"> & {
+  grant: SignedNodeCapabilityGrant | SignedNodeCapabilityInvocationGrant;
+};
+
+function relayGrantByteLimit(
+  grant: SignedNodeCapabilityGrant | SignedNodeCapabilityInvocationGrant,
+) {
+  const claims = grant.claims;
+  if ("version" in claims) return claims.limits.byteLimit;
+  const total = claims.limits.inputBytes + claims.limits.outputBytes;
+  return Number.isSafeInteger(total) ? total : Number.MAX_SAFE_INTEGER;
+}
+
+function exactCapabilityArtifacts(
+  left: SignedNodeCapabilityInvocationGrant["claims"]["inputArtifacts"],
+  right:
+    | NodeCapabilityRequestV1["inputArtifacts"]
+    | NodeCapabilityJobManifestV1["inputs"],
+) {
+  return canonicalProtocolJson(left) === canonicalProtocolJson(right);
+}
 
 export function coreNodeOperationRequestDigest(
   input: Omit<DispatchNodeOperationInput, "grant" | "signal">,
@@ -617,7 +660,7 @@ class RelaySession {
     }
   }
 
-  async dispatch(input: DispatchNodeOperationInput, requestDigest: string) {
+  async dispatch(input: RelayDispatchInput, requestDigest: string) {
     const state = this.#state;
     if (!state || this.#closed) throw new Error("NODE_CAPABILITY_OFFLINE");
     if (this.#pending.size >= this.#relay.maximumPendingOperations) {
@@ -668,7 +711,7 @@ class RelaySession {
       queue,
       nextSequence: 1,
       receivedBytes: 0,
-      byteLimit: input.grant.claims.limits.byteLimit,
+      byteLimit: relayGrantByteLimit(input.grant),
       deadlineTimer,
     });
     try {
@@ -940,6 +983,170 @@ export class CoreNodeRelay {
       throw new Error("NODE_OPERATION_RESULT_MISSING");
     }
     return values[0];
+  }
+
+  async dispatchCapability(input: DispatchNodeCapabilityInput) {
+    const session = this.#sessions.get(input.nodeId);
+    const state = session?.state;
+    if (!session || !state || session.closed) {
+      throw new Error("NODE_CAPABILITY_OFFLINE");
+    }
+    if (state.userId !== input.userId) {
+      throw new Error("NODE_CAPABILITY_OWNER_MISMATCH");
+    }
+    const artifactJob = input.operation === "capability.artifact-job";
+    const request = artifactJob
+      ? nodeCapabilityJobManifestV1Schema.parse(input.request)
+      : nodeCapabilityRequestV1Schema.parse(input.request);
+    const inputArtifacts = artifactJob
+      ? (request as NodeCapabilityJobManifestV1).inputs
+      : (request as NodeCapabilityRequestV1).inputArtifacts;
+    const grant = signedNodeCapabilityInvocationGrantSchema.parse(input.grant);
+    const claims = grant.claims;
+    const inference = state.manifest.features.inference;
+    const advertised = inference?.offerings.find(
+      (offering) => offering.descriptor.id === request.offeringId,
+    );
+    const now = this.now().getTime();
+    const requestDigest = protocolDigest(
+      artifactJob
+        ? nodeCapabilityJobRequestDigestPayload(
+            request as NodeCapabilityJobManifestV1,
+          )
+        : nodeCapabilityRequestDigestPayload(request as NodeCapabilityRequestV1),
+    );
+    const serializedInputBytes =
+      byteLength(
+        JSON.stringify(
+          artifactJob
+            ? (request as NodeCapabilityJobManifestV1).requestJson
+            : request,
+        ),
+      ) +
+      inputArtifacts.reduce(
+        (total, artifact) => total + artifact.byteSize,
+        0,
+      );
+    const mode =
+      input.operation === "capability.invoke"
+        ? "unary-relay"
+        : input.operation === "capability.stream"
+          ? "stream-relay"
+          : "artifact-job";
+    const manifestLimits = artifactJob
+      ? (request as NodeCapabilityJobManifestV1).limits
+      : null;
+    if (
+      !inference ||
+      !advertised ||
+      !inference.invocationModes.includes(mode) ||
+      advertised.descriptorDigest !== request.offeringDigest ||
+      advertised.descriptor.placement.kind !== "node" ||
+      advertised.descriptor.placement.nodeId !== input.nodeId ||
+      advertised.descriptor.placement.configRevision !== state.configRevision ||
+      request.ownerId !== input.userId ||
+      request.operationId !== claims.operationId ||
+      request.configRevision !== state.configRevision ||
+      request.requestDigest !== requestDigest ||
+      claims.audience !== input.nodeId ||
+      claims.nodeId !== input.nodeId ||
+      claims.subject !== input.userId ||
+      claims.ownerId !== input.userId ||
+      claims.offeringId !== request.offeringId ||
+      claims.offeringDigest !== request.offeringDigest ||
+      claims.configRevision !== request.configRevision ||
+      claims.requestDigest !== request.requestDigest ||
+      claims.egressPolicyDigest !== advertised.network.egressPolicyDigest ||
+      (artifactJob &&
+        ((request as NodeCapabilityJobManifestV1).egressPolicyDigest !==
+          claims.egressPolicyDigest ||
+          canonicalProtocolJson(manifestLimits) !==
+            canonicalProtocolJson(claims.limits))) ||
+      !exactCapabilityArtifacts(claims.inputArtifacts, inputArtifacts) ||
+      Date.parse(claims.notBefore) > now ||
+      Date.parse(claims.expiresAt) <= now ||
+      Date.parse(claims.limits.deadline) <= now ||
+      serializedInputBytes > claims.limits.inputBytes
+    ) {
+      throw new Error("NODE_CAPABILITY_GRANT_BINDING_INVALID");
+    }
+    await this.registry.assertCapabilityReady({
+      nodeId: input.nodeId,
+      userId: input.userId,
+      capability: "inference",
+      configRevision: state.configRevision,
+      connectionEpoch: state.connectionEpoch,
+    });
+    return session.dispatch(
+      {
+        userId: input.userId,
+        nodeId: input.nodeId,
+        capability: "inference",
+        capabilityVersion: 1,
+        operationId: request.operationId,
+        operation: input.operation,
+        payload: { ownerId: input.userId, input: request },
+        grant,
+        configRevision: request.configRevision,
+        deadline: claims.limits.deadline,
+        ...(input.signal ? { signal: input.signal } : {}),
+      },
+      request.requestDigest,
+    );
+  }
+
+  async requestCapability(input: Omit<DispatchNodeCapabilityInput, "operation">) {
+    const operation = await this.dispatchCapability({
+      ...input,
+      operation: "capability.invoke",
+    });
+    const values: NodeCapabilityResultV1[] = [];
+    for await (const value of operation) {
+      values.push(nodeCapabilityResultV1Schema.parse(value));
+      if (values.length > 1) {
+        await operation.cancel("UNEXPECTED_STREAM_RESULT");
+        throw new Error("NODE_CAPABILITY_RESULT_CARDINALITY_INVALID");
+      }
+    }
+    if (values.length !== 1) {
+      throw new Error("NODE_CAPABILITY_RESULT_MISSING");
+    }
+    return values[0]!;
+  }
+
+  async requestArtifactCapability(
+    input: Omit<DispatchNodeCapabilityInput, "operation"> & {
+      request: NodeCapabilityJobManifestV1;
+    },
+  ) {
+    const operation = await this.dispatchCapability({
+      ...input,
+      operation: "capability.artifact-job",
+    });
+    const values: NodeCapabilityResultV1[] = [];
+    for await (const value of operation) {
+      values.push(nodeCapabilityResultV1Schema.parse(value));
+      if (values.length > 1) {
+        await operation.cancel("UNEXPECTED_STREAM_RESULT");
+        throw new Error("NODE_CAPABILITY_RESULT_CARDINALITY_INVALID");
+      }
+    }
+    if (values.length !== 1) {
+      throw new Error("NODE_CAPABILITY_RESULT_MISSING");
+    }
+    return values[0]!;
+  }
+
+  async *streamCapability(
+    input: Omit<DispatchNodeCapabilityInput, "operation">,
+  ): AsyncIterable<NodeCapabilityEventV1> {
+    const operation = await this.dispatchCapability({
+      ...input,
+      operation: "capability.stream",
+    });
+    for await (const value of operation) {
+      yield nodeCapabilityEventV1Schema.parse(value);
+    }
   }
 
   async dispatchJob(input: {

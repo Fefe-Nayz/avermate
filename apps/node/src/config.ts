@@ -2,15 +2,20 @@ import { readFile } from "node:fs/promises";
 import { isIP } from "node:net";
 import { resolve } from "node:path";
 import {
+  capabilityKindSchema,
+  capabilityOfferingPublicDescriptorSchema,
+  dataHandlingDescriptorSchema,
   LOCAL_OCR_MODEL_ID,
   LOCAL_TRANSCRIPTION_MODEL_ID,
   modelDescriptorSchema,
+  nodeCapabilityInvocationModeSchema,
   sandboxEgressPolicySchema,
   sandboxProfileIdSchema,
 } from "@avermate/agent-contracts";
 import { parse, stringify } from "yaml";
 import { z } from "zod";
 import { canonicalDigest } from "./canonical-json";
+import { parseNodeLocalSidecarBaseUrl } from "./capabilities/local-endpoint";
 
 export const nodeProfileSchema = z.enum([
   "dev-zero",
@@ -212,6 +217,154 @@ const disabledSpecialistWorker = {
   allowedHosts: [],
 };
 
+const sidecarIdSchema = z
+  .string()
+  .min(1)
+  .max(63)
+  .regex(/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u);
+
+const sidecarDescriptorSchema = z
+  .strictObject({
+    schemaVersion: z.literal(1),
+    connectionRevision: z.number().int().positive(),
+    pluginId: z.string().trim().min(1).max(128),
+    pluginVersion: immutableRevisionSchema,
+    adapterRevision: immutableRevisionSchema,
+    capability: capabilityKindSchema,
+    capabilityProtocolVersion: z.literal(1),
+    provider: z.string().trim().min(1).max(128),
+    modelId: z.string().trim().min(1).max(256),
+    modelRevision: immutableRevisionSchema,
+    dataHandling: dataHandlingDescriptorSchema,
+    limits: z.strictObject({
+      maxInputBytes: z.number().int().positive().nullable(),
+      maxOutputBytes: z.number().int().positive().nullable(),
+      maxBatchSize: z.number().int().positive().nullable(),
+      maxConcurrency: z.number().int().positive().max(10_000).nullable(),
+    }),
+    supportedLanguages: z.union([
+      z.array(z.string().trim().min(2).max(35)).max(512),
+      z.literal("unknown"),
+    ]),
+    healthCheckKind: z.enum(["active-probe", "passive", "node-attested"]),
+    specification: z.json(),
+  })
+  .superRefine((descriptor, context) => {
+    const parsed = capabilityOfferingPublicDescriptorSchema.safeParse({
+      ...descriptor,
+      id: "sidecar-config-validation",
+      connectionId: "sidecar-config-validation",
+      placement: {
+        kind: "node",
+        nodeId: "node-config-validation",
+        configRevision: `sha256:${"0".repeat(64)}`,
+      },
+    });
+    if (!parsed.success) {
+      for (const issue of parsed.error.issues.slice(0, 16)) {
+        context.addIssue({
+          code: "custom",
+          path: issue.path.filter(
+            (part) => !["id", "connectionId", "placement"].includes(String(part)),
+          ),
+          message: issue.message,
+        });
+      }
+    }
+  });
+
+export const nodeCapabilitySidecarConfigSchema = z
+  .strictObject({
+    id: sidecarIdSchema,
+    enabled: z.boolean().default(true),
+    descriptor: sidecarDescriptorSchema,
+    invocationModes: z
+      .array(nodeCapabilityInvocationModeSchema)
+      .min(1)
+      .max(3),
+    baseUrl: z.string().min(1).max(2_048).superRefine((value, context) => {
+      try {
+        parseNodeLocalSidecarBaseUrl(value);
+      } catch {
+        context.addIssue({
+          code: "custom",
+          message:
+            "sidecar baseUrl must be explicit-port HTTP on loopback, private IP or local/Compose DNS",
+        });
+      }
+    }),
+    secretRef: nodeSecretReferenceSchema.optional(),
+    runtimeRevision: immutableRevisionSchema,
+    imageDigest: digestSchema.nullable().default(null),
+    egressPolicyDigest: digestSchema,
+    health: z
+      .strictObject({
+        timeoutMs: z.number().int().min(100).max(60_000).default(10_000),
+      })
+      .default({ timeoutMs: 10_000 }),
+    compose: z
+      .strictObject({
+        image: z
+          .string()
+          .min(1)
+          .max(512)
+          .regex(
+            /^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$/iu,
+            "expected an immutable OCI image reference",
+          ),
+        containerPort: z.number().int().min(1_024).max(65_535),
+      })
+      .optional(),
+  })
+  .superRefine((sidecar, context) => {
+    if (new Set(sidecar.invocationModes).size !== sidecar.invocationModes.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["invocationModes"],
+        message: "sidecar invocation modes must be unique",
+      });
+    }
+    if (sidecar.descriptor.dataHandling.egress === "none" && sidecar.secretRef) {
+      context.addIssue({
+        code: "custom",
+        path: ["secretRef"],
+        message: "an egress-free sidecar cannot receive a provider credential",
+      });
+    }
+    if (sidecar.descriptor.healthCheckKind !== "active-probe") {
+      context.addIssue({
+        code: "custom",
+        path: ["descriptor", "healthCheckKind"],
+        message: "configured HTTP sidecars require the active health endpoint",
+      });
+    }
+    if (!sidecar.compose) return;
+    const base = parseNodeLocalSidecarBaseUrl(sidecar.baseUrl);
+    if (
+      base.hostname !== sidecar.id ||
+      Number(base.port) !== sidecar.compose.containerPort
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["compose"],
+        message: "Compose sidecar host/port must match its id and containerPort",
+      });
+    }
+    if (
+      !sidecar.imageDigest ||
+      !sidecar.compose.image.endsWith(`@${sidecar.imageDigest}`)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["compose", "image"],
+        message: "Compose image must match the declared runtime image digest",
+      });
+    }
+  });
+export type NodeCapabilitySidecarConfig = z.infer<
+  typeof nodeCapabilitySidecarConfigSchema
+>;
+
 export const nodeConfigSchema = z
   .strictObject({
     version: z.literal(1),
@@ -283,6 +436,14 @@ export const nodeConfigSchema = z
         embeddingDimensions: [],
       }),
     models: modelConfigSchema,
+    capabilities: z
+      .strictObject({
+        sidecars: z
+          .array(nodeCapabilitySidecarConfigSchema)
+          .max(32)
+          .default([]),
+      })
+      .default({ sidecars: [] }),
     mcp: z
       .strictObject({
         enabled: z.boolean().default(false),
@@ -388,6 +549,17 @@ export const nodeConfigSchema = z
     }),
   })
   .superRefine((config, context) => {
+    const sidecarIds = new Set<string>();
+    for (const [index, sidecar] of config.capabilities.sidecars.entries()) {
+      if (sidecarIds.has(sidecar.id)) {
+        context.addIssue({
+          code: "custom",
+          path: ["capabilities", "sidecars", index, "id"],
+          message: "sidecar ids must be unique",
+        });
+      }
+      sidecarIds.add(sidecar.id);
+    }
     if (config.relay.transport === "local-compose") {
       if (config.profile !== "full-self-host" || !config.lifecycle.offline) {
         context.addIssue({
@@ -845,6 +1017,7 @@ export function defaultDevZeroConfig(baseDir = ".data/node"): NodeConfig {
       providerSecretRefs: [],
       catalogue: [],
     },
+    capabilities: { sidecars: [] },
     mcp: {
       enabled: false,
       allowedEndpoints: [],
@@ -913,6 +1086,12 @@ export function publicConfig(input: NodeConfig) {
         () => "configured",
       ),
       adminSecretRef: configured(input.models.adminSecretRef),
+    },
+    capabilities: {
+      sidecars: input.capabilities.sidecars.map((sidecar) => ({
+        ...sidecar,
+        secretRef: configured(sidecar.secretRef),
+      })),
     },
     mcp: input.mcp,
     sandbox: {

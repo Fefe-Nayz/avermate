@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { env } from "./env";
 import {
   markServiceKeyInvalid,
@@ -9,23 +10,26 @@ import {
   reserveManagedProviderUsage,
   settleManagedProviderUsage,
 } from "../usage/managed-provider-accounting";
+import {
+  DEFAULT_MISTRAL_SPEECH_MODEL,
+  MISTRAL_SPEECH_URL,
+  MistralSpeechSynthesisAdapter,
+  SpeechSynthesisProviderError,
+  type SpeechProviderFetcher,
+  type SpeechSynthesisChunkAdapter,
+} from "../capabilities/providers/speech-synthesis";
+import { capabilityExecutionMode, capabilityRuntime } from "../capabilities/runtime";
+import { capabilityRegistryInvoker } from "../capabilities/registry-invoker";
+import { coreCapabilityArtifactIo } from "../capabilities/artifact-io";
+import { newId } from "./id";
 
-/** Official Mistral Voxtral TTS request contract. */
-export const MISTRAL_SPEECH_URL = "https://api.mistral.ai/v1/audio/speech";
-export const DEFAULT_MISTRAL_SPEECH_MODEL = "voxtral-mini-tts-2603";
+export { DEFAULT_MISTRAL_SPEECH_MODEL, MISTRAL_SPEECH_URL };
 export const SPEECH_CHUNK_MAX_CHARS = 3_500;
 export const SPEECH_MAX_CHUNKS = 32;
 export const SPEECH_MAX_AUDIO_BYTES = 100 * 1024 * 1024;
 
-const MAX_PROVIDER_RESPONSE_BYTES = 20 * 1024 * 1024;
 const ATTEMPT_TIMEOUT_MS = 2 * 60 * 1_000;
-const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 const MAX_ATTEMPTS = 4;
-
-type Fetcher = (
-  input: string | URL | Request,
-  init?: RequestInit,
-) => Promise<Response>;
 
 export interface MistralSpeechResult {
   audio: Uint8Array;
@@ -34,10 +38,14 @@ export interface MistralSpeechResult {
   voiceId: string | null;
   chunkCount: number;
   characterCount: number;
+  /** Compatibility metadata; future registry adapters can return another id. */
+  provider?: string;
+  /** Durable file created by a registry adapter; artifact workflows can adopt it. */
+  artifactFileId?: string;
 }
 
 export interface MistralSpeechOptions {
-  fetch?: Fetcher;
+  fetch?: SpeechProviderFetcher;
   sleep?: (milliseconds: number) => Promise<void>;
   /** Test seam. Production resolves the sealed user key, then operator key. */
   key?: string;
@@ -49,6 +57,10 @@ export interface MistralSpeechOptions {
   operationId?: string;
   signal?: AbortSignal;
   attemptTimeoutMs?: number;
+  /** Provider-attempt seam used by registry/conformance tests. */
+  adapter?: SpeechSynthesisChunkAdapter;
+  projectId?: string;
+  workflowId?: string;
 }
 
 function ttsDisabled() {
@@ -57,7 +69,15 @@ function ttsDisabled() {
 }
 
 export async function textToSpeechEnabled(userId?: string) {
-  if (ttsDisabled() || env.TTS_PROVIDER !== "mistral") return false;
+  if (ttsDisabled()) return false;
+  if (capabilityExecutionMode("speech.synthesize") === "registry") {
+    return userId ? capabilityRegistryInvoker.isConfigured({
+      ownerId: userId,
+      capability: "speech.synthesize",
+      purpose: "media.podcast-narration",
+    }) : false;
+  }
+  if (env.TTS_PROVIDER !== "mistral") return false;
   if (!userId) {
     return operatorServiceKeysEnabled() && Boolean(env.MISTRAL_API_KEY?.trim());
   }
@@ -84,54 +104,6 @@ function attemptSignal(parent: AbortSignal | undefined, timeoutMs: number) {
       parent?.removeEventListener("abort", abortFromParent);
     },
   };
-}
-
-async function boundedText(response: Response, signal?: AbortSignal) {
-  const declared = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > MAX_PROVIDER_RESPONSE_BYTES) {
-    await response.body?.cancel().catch(() => undefined);
-    throw new Error("Mistral speech response is larger than 20 MiB");
-  }
-  if (!response.body) return "";
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let total = 0;
-  let output = "";
-  try {
-    while (true) {
-      if (signal?.aborted) throw abortReason(signal);
-      const part = await reader.read();
-      if (part.done) break;
-      total += part.value.byteLength;
-      if (total > MAX_PROVIDER_RESPONSE_BYTES) {
-        await reader.cancel().catch(() => undefined);
-        throw new Error("Mistral speech response is larger than 20 MiB");
-      }
-      output += decoder.decode(part.value, { stream: true });
-    }
-    return output + decoder.decode();
-  } finally {
-    reader.releaseLock();
-  }
-}
-
-function providerMessage(status: number, body: string, secret: string) {
-  let detail = "";
-  try {
-    const parsed = JSON.parse(body) as {
-      detail?: unknown;
-      message?: unknown;
-      error?: { message?: unknown };
-    };
-    const candidate = parsed.detail ?? parsed.message ?? parsed.error?.message;
-    detail = typeof candidate === "string" ? candidate : "";
-  } catch {
-    detail = body;
-  }
-  const safe = detail.replaceAll(secret, "[redacted]").trim().slice(0, 300);
-  return safe
-    ? `Mistral speech returned ${status}: ${safe}`
-    : `Mistral speech returned ${status}`;
 }
 
 function credentialForTests(key: string): ResolvedServiceKey {
@@ -181,28 +153,12 @@ export function splitSpeechText(
   return chunks;
 }
 
-function decodeAudioData(value: unknown) {
-  if (
-    typeof value !== "string" ||
-    !value ||
-    value.length > Math.ceil((MAX_PROVIDER_RESPONSE_BYTES * 4) / 3) + 8 ||
-    !/^[A-Za-z0-9+/]*={0,2}$/.test(value)
-  ) {
-    throw new Error("Mistral speech returned malformed audio data");
-  }
-  const decoded = Uint8Array.from(Buffer.from(value, "base64"));
-  if (decoded.byteLength === 0) {
-    throw new Error("Mistral speech returned empty audio data");
-  }
-  return decoded;
-}
-
 async function generateChunk(
   chunk: string,
   input: {
+    adapter: SpeechSynthesisChunkAdapter;
     credential: ResolvedServiceKey;
     userId: string;
-    fetcher: Fetcher;
     sleep: (milliseconds: number) => Promise<void>;
     model: string;
     voiceId: string | null;
@@ -215,24 +171,19 @@ async function generateChunk(
     if (input.signal?.aborted) throw abortReason(input.signal);
     const deadline = attemptSignal(input.signal, input.attemptTimeoutMs);
     try {
-      const response = await input.fetcher(MISTRAL_SPEECH_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${input.credential.key}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          input: chunk,
-          model: input.model,
-          response_format: "mp3",
-          stream: false,
-          ...(input.voiceId ? { voice_id: input.voiceId } : {}),
-        }),
+      const result = await input.adapter.synthesizeChunk({
+        text: chunk,
+        model: input.model,
+        voiceId: input.voiceId,
+        credential: input.credential.key,
         signal: deadline.signal,
       });
-      const body = await boundedText(response, deadline.signal);
+      return result.audio;
+    } catch (error) {
+      if (input.signal?.aborted) throw abortReason(input.signal);
       if (
-        (response.status === 401 || response.status === 403) &&
+        error instanceof SpeechSynthesisProviderError &&
+        (error.status === 401 || error.status === 403) &&
         input.credential.source === "user"
       ) {
         await markServiceKeyInvalid(
@@ -241,30 +192,10 @@ async function generateChunk(
           input.credential.invalidationToken,
         );
       }
-      if (!response.ok) {
-        const error = new Error(
-          providerMessage(response.status, body, input.credential.key),
-        );
-        if (!RETRYABLE_STATUSES.has(response.status)) throw error;
-        lastError = error;
-      } else {
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(body);
-        } catch {
-          throw new Error("Mistral speech returned malformed JSON");
-        }
-        return decodeAudioData(
-          (parsed as { audio_data?: unknown } | null)?.audio_data,
-        );
-      }
-    } catch (error) {
-      if (input.signal?.aborted) throw abortReason(input.signal);
       lastError = error;
       if (
-        error instanceof Error &&
-        /returned (?:4\d\d)/.test(error.message) &&
-        !/returned 429/.test(error.message)
+        error instanceof SpeechSynthesisProviderError &&
+        !error.retryable
       ) {
         throw error;
       }
@@ -331,7 +262,8 @@ export async function runMistralTextToSpeech(
     model,
     estimatorVersion: "tts-unicode-codepoints/1",
   });
-  const fetcher = options.fetch ?? fetch;
+  const adapter =
+    options.adapter ?? new MistralSpeechSynthesisAdapter(options.fetch ?? fetch);
   const sleep =
     options.sleep ??
     ((milliseconds: number) =>
@@ -344,9 +276,9 @@ export async function runMistralTextToSpeech(
     for (const chunk of chunks) {
       providerStarted = true;
       const audio = await generateChunk(chunk, {
+        adapter,
         credential,
         userId,
-        fetcher,
         sleep,
         model,
         voiceId,
@@ -379,6 +311,7 @@ export async function runMistralTextToSpeech(
       voiceId,
       chunkCount: chunks.length,
       characterCount,
+      provider: adapter.providerId,
     };
   } catch (error) {
     if (reservation && providerStarted && !accountingSettled) {
@@ -391,4 +324,95 @@ export async function runMistralTextToSpeech(
     }
     throw error;
   }
+}
+
+/** Provider-neutral workflow facade. Legacy callers remain source-compatible. */
+export async function textToSpeech(
+  userId: string,
+  text: string,
+  options: MistralSpeechOptions = {},
+) {
+  const model = options.model ?? env.TTS_MODEL;
+  const selection = {
+    offeringId: null,
+    routeKey: `mistral:${model}`,
+    provider: "mistral",
+    modelId: model,
+    reason: "legacy-connection-bridge",
+  } as const;
+  const registryResolve = () =>
+    capabilityRegistryInvoker.resolve({
+      ownerId: userId,
+      capability: "speech.synthesize",
+      purpose: "media.podcast-narration",
+      projectId: options.projectId,
+      workflowId: options.workflowId,
+      requirements: {
+        inputBytes: new TextEncoder().encode(text).byteLength,
+        batchSize: 1,
+        voiceMode: "exact",
+        requiredFeatures: ["alignment.none"],
+      },
+    });
+  const registryExecute = async (): Promise<MistralSpeechResult> => {
+    const voiceId = options.voiceId ?? env.TTS_VOICE_ID ?? "default";
+    const result = await capabilityRegistryInvoker.invoke({
+      ownerId: userId,
+      capability: "speech.synthesize",
+      purpose: "media.podcast-narration",
+      projectId: options.projectId,
+      workflowId: options.workflowId,
+      request: {
+        schemaVersion: 1,
+        text,
+        voice: { mode: "exact", voiceId },
+        output: { container: "mp3" },
+        alignment: "none",
+      },
+      idempotencyKey: options.operationId
+        ? `tts-${createHash("sha256").update(options.operationId).digest("hex")}`
+        : newId("tts"),
+      requirements: {
+        inputBytes: new TextEncoder().encode(text).byteLength,
+        batchSize: 1,
+        voiceMode: "exact",
+        requiredFeatures: ["alignment.none"],
+      },
+      signal: options.signal,
+    });
+    const audio = await coreCapabilityArtifactIo.read(userId, result.audio, {
+      maximumBytes: SPEECH_MAX_AUDIO_BYTES,
+      signal: options.signal ?? new AbortController().signal,
+    });
+    const metadata = result.providerMetadata ?? {};
+    return {
+      audio,
+      mimeType: "audio/mpeg",
+      model:
+        typeof metadata.modelId === "string" ? metadata.modelId : "unknown",
+      voiceId: result.voice.providerVoiceId,
+      chunkCount:
+        typeof metadata.chunkCount === "number" ? metadata.chunkCount : 1,
+      characterCount: Array.from(text).length,
+      provider:
+        typeof metadata.provider === "string" ? metadata.provider : "registry",
+      artifactFileId:
+        result.audio.object.namespace === "files"
+          ? result.audio.object.key
+          : undefined,
+    };
+  };
+  return capabilityRuntime.invoke({
+    ownerId: userId,
+    capability: "speech.synthesize",
+    purpose: "media.podcast-narration",
+    legacy: {
+      resolve: async () => selection,
+      execute: () => runMistralTextToSpeech(userId, text, options),
+    },
+    registry: {
+      resolve: registryResolve,
+      execute: registryExecute,
+    },
+  });
 }

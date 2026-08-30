@@ -14,7 +14,9 @@ export type AssistantModelAttemptEvent = Readonly<{
   attempt: number;
 }>;
 
-function requestMessageCommitment(message: ModelRequest["messages"][number]) {
+export function requestMessageCommitment(
+  message: ModelRequest["messages"][number],
+) {
   return {
     trust: message.trust,
     mediaType: message.mediaType,
@@ -99,6 +101,7 @@ export async function* streamExplicitModelAttempts(input: {
   for (let attempt = 0; attempt < selections.length; attempt += 1) {
     const selection = selections[attempt]!;
     const messages = messagesForSelection(selection, input.messages);
+    const tools = selection.descriptor.capabilities.tools ? input.tools : [];
     const stableRequestKey = selection.providerSupportsStableRequestKey
       ? `assistant:${input.runId}:model-round:${input.round}:attempt:${attempt}`
       : null;
@@ -115,7 +118,7 @@ export async function* streamExplicitModelAttempts(input: {
         modelRevision: selection.modelRevision ?? selection.descriptor.id,
         placement: selection.modelPlacement ?? selection.capability.placement,
         messages: messages.map(requestMessageCommitment),
-        tools: input.tools,
+        tools,
       }),
     );
     input.onAttempt?.(selection, attempt);
@@ -141,7 +144,7 @@ export async function* streamExplicitModelAttempts(input: {
         ...(stableRequestKey ? { requestKey: stableRequestKey } : {}),
         modelId: selection.descriptor.id,
         messages,
-        tools: input.tools,
+        tools,
         abortSignal: input.signal,
       })) {
         input.signal.throwIfAborted();

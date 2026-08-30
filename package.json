@@ -95,6 +95,7 @@
     "verify:039": "bun scripts/verification/plan-039.ts",
     "sandbox:conformance": "bun run --cwd apps/server sandbox:conformance",
     "sandbox:conformance:mock": "bun run --cwd apps/server sandbox:conformance:mock",
+    "capability:live": "bun run --cwd apps/server capability:live",
     "dev:web": "turbo -F web dev",
     "dev:server": "turbo -F server dev",
     "dev:mobile": "turbo -F mobile dev",

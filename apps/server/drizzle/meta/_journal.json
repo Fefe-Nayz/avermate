@@ -484,6 +484,13 @@
       "when": 1787867440477,
       "tag": "0068_dusty_vermin",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "6",
+      "when": 1787935379523,
+      "tag": "0069_capability_control_plane",
+      "breakpoints": true
     }
   ]
 }

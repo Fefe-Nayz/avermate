@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { parseHTML } from "linkedom";
+import { parse } from "yaml";
 import { defaultDevZeroConfig, loadNodeConfig, publicConfig } from "./config";
 import { ConfiguratorSecurity } from "./configurator-security";
 import { pairingCoreUrl } from "./configurator";
@@ -336,6 +337,10 @@ describe("local configurator security", () => {
     expect(
       document.querySelector('[data-field-path="storage.driver"]')?.textContent,
     ).toBe("Storage driver");
+    expect(
+      document.querySelector('[data-field-path="capabilities.sidecars"]')
+        ?.textContent,
+    ).toContain("Private sidecars");
     expect(document.querySelector("#status")?.textContent).toBe(
       "Configurator unlocked",
     );
@@ -490,5 +495,127 @@ describe("local configurator security", () => {
     expect(persisted).not.toContain(rawSecret);
     expect(persisted).toContain("secret:setup-model-admin-");
     expect(await applied.text()).not.toContain("secret:");
+  });
+
+  test("edits private sidecars, seals their secret and generates internal-only Compose", async () => {
+    const { daemon, secret, root } = await fixture();
+    const session = await unlock(daemon, secret);
+    const rawSecret = "private-sidecar-provider-secret";
+    const stored = await daemon.fetch(
+      request("/api/setup/secret", {
+        method: "POST",
+        origin: "http://127.0.0.1:51881",
+        cookie: session.cookie,
+        csrf: session.csrf,
+        body: {
+          slot: "capability-sidecar:speech-sidecar",
+          value: rawSecret,
+        },
+      }),
+    );
+    expect(stored.status).toBe(200);
+    const imageDigest = `sha256:${"9".repeat(64)}`;
+    const sidecar = {
+      id: "speech-sidecar",
+      enabled: true,
+      descriptor: {
+        schemaVersion: 1,
+        connectionRevision: 1,
+        pluginId: "avermate.node.sidecar",
+        pluginVersion: "sidecar-plugin-r1",
+        adapterRevision: "sidecar-adapter-r1",
+        capability: "speech.transcribe",
+        capabilityProtocolVersion: 1,
+        provider: "local-speech",
+        modelId: "local-speech-model",
+        modelRevision: "local-speech-model-r1",
+        dataHandling: {
+          egress: "owner-node",
+          providerName: null,
+          region: null,
+          disclosureRevision: "node-sidecar-v1",
+          retentionDisclosureRevision: null,
+          trainingDisclosureRevision: null,
+          requiresExplicitConsent: false,
+        },
+        limits: {
+          maxInputBytes: 32 * 1024 * 1024,
+          maxOutputBytes: 8 * 1024 * 1024,
+          maxBatchSize: 1,
+          maxConcurrency: 1,
+        },
+        supportedLanguages: "unknown",
+        healthCheckKind: "active-probe",
+        specification: {
+          modes: ["batch"],
+          timestamps: ["none", "segment"],
+          diarization: false,
+          languageDetection: true,
+          languageHint: true,
+          vocabularyHints: false,
+          inputMimeTypes: ["audio/mpeg"],
+          maxBytes: 32 * 1024 * 1024,
+          maxDurationSeconds: 7_200,
+          maximumSpeakers: null,
+        },
+      },
+      invocationModes: ["artifact-job"],
+      baseUrl: "http://speech-sidecar:8080",
+      secretRef: "configured",
+      runtimeRevision: "speech-runtime-r1",
+      imageDigest,
+      egressPolicyDigest: `sha256:${"8".repeat(64)}`,
+      health: { timeoutMs: 2_000 },
+      compose: {
+        image: `ghcr.io/avermate/speech-sidecar:v1@${imageDigest}`,
+        containerPort: 8_080,
+      },
+    };
+    const next = structuredClone(session.config);
+    next.capabilities.sidecars = [sidecar as never];
+    const cookie = stored.headers.get("set-cookie")!;
+    const csrf = stored.headers.get("x-csrf-token")!;
+    const preview = await daemon.fetch(
+      request("/api/setup/deployment/preview", {
+        method: "POST",
+        origin: "http://127.0.0.1:51881",
+        cookie,
+        csrf,
+        body: next,
+      }),
+    );
+    expect(preview.status).toBe(200);
+    const previewBody = (await preview.json()) as { composeOverride: string };
+    expect(previewBody.composeOverride).toContain(
+      'NODE_CAPABILITY_PROTOCOL_V1: "true"',
+    );
+    expect(previewBody.composeOverride).toContain("  speech-sidecar:");
+    expect(previewBody.composeOverride).toContain(
+      `image: ghcr.io/avermate/speech-sidecar:v1@${imageDigest}`,
+    );
+    expect(previewBody.composeOverride).not.toContain("127.0.0.1:8080");
+    expect(
+      (parse(previewBody.composeOverride) as {
+        services: Record<string, unknown>;
+      }).services["speech-sidecar"],
+    ).toBeDefined();
+    expect(JSON.stringify(previewBody)).not.toContain(rawSecret);
+    expect(JSON.stringify(previewBody)).not.toContain("secret:");
+
+    const applied = await daemon.fetch(
+      request("/api/setup/config/apply", {
+        method: "POST",
+        origin: "http://127.0.0.1:51881",
+        cookie,
+        csrf,
+        body: next,
+      }),
+    );
+    expect(applied.status).toBe(200);
+    expect(await applied.text()).not.toContain("secret:");
+    const persisted = await loadNodeConfig(join(root, "avermate-node.yaml"));
+    expect(persisted.capabilities.sidecars[0]?.secretRef).toMatch(
+      /^secret:setup-sidecar-[a-f0-9]{12}-[a-f0-9]{12}$/u,
+    );
   });
 });

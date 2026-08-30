@@ -6,7 +6,8 @@ import {
 } from "@avermate/agent-contracts";
 import { createHash } from "node:crypto";
 import { canonicalFileUrl } from "../lib/storage-backend";
-import { DOCUMENT_ARTIFACT_STORAGE_QUOTA_BYTES } from "../lib/storage";
+import { DOCUMENT_ARTIFACT_STORAGE_QUOTA_BYTES, COURSE_MEDIA_STORAGE_QUOTA_BYTES } from "../lib/storage";
+import { capabilityArtifactPurpose } from "../lib/capability-artifact-policy";
 import type {
   ObjectAdoptionIntent,
   ObjectAdoptionRecord,
@@ -182,7 +183,7 @@ export class CoreObjectAdoptionRepository implements ObjectAdoptionRepository {
   constructor(
     private readonly client: AdoptionSqlClient,
     private readonly options: {
-      managedProvider: "local" | "s3";
+      managedProvider: string;
       quotaBytes?: number;
       clock?: () => Date;
     },
@@ -278,6 +279,7 @@ export class CoreObjectAdoptionRepository implements ObjectAdoptionRepository {
       if (!row) throw new Error("ADOPTION_NOT_FOUND");
       const current = record(row);
       const metadata = assertMetadataMatchesRow(metadataValue, row);
+      const purpose = capabilityArtifactPurpose(metadata.ref.namespace);
       if (current.state === "needs_operator") {
         throw new Error("ADOPTION_NEEDS_OPERATOR");
       }
@@ -298,13 +300,13 @@ export class CoreObjectAdoptionRepository implements ObjectAdoptionRepository {
       if (!existingFile) {
         const usage = await transaction.execute({
           sql: `SELECT COALESCE(SUM(byteSize), 0) AS total FROM files
-            WHERE userId = ? AND purpose = 'document-artifact'
+            WHERE userId = ? AND purpose = ?
               AND status = 'stored'`,
-          args: [metadata.ref.ownerId],
+          args: [metadata.ref.ownerId, purpose],
         });
         if (
           Number(usage.rows[0]?.total ?? 0) + metadata.byteSize >
-          (this.options.quotaBytes ?? DOCUMENT_ARTIFACT_STORAGE_QUOTA_BYTES)
+          (this.options.quotaBytes ?? (purpose === "document-artifact" ? DOCUMENT_ARTIFACT_STORAGE_QUOTA_BYTES : purpose === "course-media" ? COURSE_MEDIA_STORAGE_QUOTA_BYTES : Number.MAX_SAFE_INTEGER))
         ) {
           throw new Error("ADOPTION_STORAGE_QUOTA_EXCEEDED");
         }
@@ -313,7 +315,7 @@ export class CoreObjectAdoptionRepository implements ObjectAdoptionRepository {
           sql: `INSERT INTO files
             (id, provider, storageKey, url, mimeType, byteSize, purpose,
              status, previewStatus, userId, createdAt, updatedAt)
-            VALUES (?, ?, ?, ?, ?, ?, 'document-artifact', 'stored',
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'stored',
                     'pending', ?, ?, ?)`,
           args: [
             fileId,
@@ -322,6 +324,7 @@ export class CoreObjectAdoptionRepository implements ObjectAdoptionRepository {
             canonicalFileUrl(fileId),
             metadata.mimeType,
             metadata.byteSize,
+            purpose,
             metadata.ref.ownerId,
             now,
             now,
@@ -342,7 +345,7 @@ export class CoreObjectAdoptionRepository implements ObjectAdoptionRepository {
         String(canonical.userId) !== metadata.ref.ownerId ||
         String(canonical.mimeType) !== metadata.mimeType ||
         Number(canonical.byteSize) !== metadata.byteSize ||
-        String(canonical.purpose) !== "document-artifact" ||
+        String(canonical.purpose) !== purpose ||
         String(canonical.status) !== "stored"
       ) {
         throw new Error("ADOPTION_CANONICAL_FILE_CONFLICT");

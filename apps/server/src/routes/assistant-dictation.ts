@@ -98,6 +98,7 @@ export function createAssistantDictationRoutes(
       }
       const provider = await resolveProvider(user.id, {
         signal: context.req.raw.signal,
+        purpose: "assistant.dictation",
       });
       const result = await provider.transcribeSegment({
         blob: audio,

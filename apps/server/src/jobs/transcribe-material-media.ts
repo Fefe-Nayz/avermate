@@ -167,7 +167,7 @@ export async function runTranscribeMaterialMediaJob(
   payload: unknown,
   options: {
     signal?: AbortSignal;
-    resolveProvider?: (userId: string) => Promise<TranscriptionProvider>;
+    resolveProvider?: typeof resolveTranscriptionProvider;
     operationId?: string;
     attempt?: number;
     job?: JobExecutionIdentity;
@@ -265,7 +265,9 @@ export async function runTranscribeMaterialMediaJob(
         });
     const provider = await (
       options.resolveProvider ?? resolveTranscriptionProvider
-    )(source.document.userId);
+    )(source.document.userId, {
+      purpose: "materials.media-transcription",
+    });
     const results: TranscriptionResult[] = [];
     for (const [segmentIndex, bytes] of segmentBytes.entries()) {
       options.signal?.throwIfAborted();

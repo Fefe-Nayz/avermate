@@ -37,6 +37,118 @@ export type OrpcAuditRow = {
   fileTransport: "none" | "opaque-handle-required";
 };
 
+/**
+ * This is an exposure review, not an execution allowlist. authenticated oRPC
+ * ownership is not agent approval: first-party descriptors and MCP grants are
+ * still the only agent entry points. In particular, an agent must not change
+ * the credentials, routing policy or consent that authorizes its own work.
+ */
+export const capabilityControlPlaneExposureReview: Record<
+  string,
+  { classification: ExposureClassification; rationale: string }
+> = {
+  "capabilities.catalogue": {
+    classification: "safe-after-output-narrowing",
+    rationale:
+      "Reviewed plugin/configuration metadata, never credential values; expose only the capability summary needed by the task.",
+  },
+  "capabilities.readiness": {
+    classification: "safe-after-output-narrowing",
+    rationale:
+      "Owner-scoped readiness counts; a future tool needs a bounded readiness projection, not configuration authority.",
+  },
+  "capabilities.connections.list": {
+    classification: "safe-after-output-narrowing",
+    rationale:
+      "Owner connection and legacy-key metadata contains configuration/endpoints; omit those and credential-slot details from a model projection.",
+  },
+  "capabilities.connections.create": {
+    classification: "human-or-admin-only",
+    rationale:
+      "Accepts secrets and establishes credential, endpoint and execution-placement authority; human settings only.",
+  },
+  "capabilities.connections.update": {
+    classification: "human-or-admin-only",
+    rationale:
+      "Rotates secrets or changes endpoint/placement authority; revision checks do not constitute agent approval.",
+  },
+  "capabilities.connections.validate": {
+    classification: "human-or-admin-only",
+    rationale:
+      "Uses a credential for an active remote probe and changes validation/health state; this is not a read.",
+  },
+  "capabilities.connections.discover": {
+    classification: "human-or-admin-only",
+    rationale:
+      "Performs a credential-bearing probe and registers offerings/health, changing available execution routes; this is not a read.",
+  },
+  "capabilities.connections.disable": {
+    classification: "human-or-admin-only",
+    rationale:
+      "Revokes an execution connection and its health eligibility; routing authority remains with the owner.",
+  },
+  "capabilities.connections.delete": {
+    classification: "human-or-admin-only",
+    rationale:
+      "Soft-deletes connection/credential authority while retaining audit history; not an agent cleanup operation.",
+  },
+  "capabilities.offerings.list": {
+    classification: "safe-after-output-narrowing",
+    rationale:
+      "Owner offering descriptors and health require a minimized capability/model projection without private transport configuration.",
+  },
+  "capabilities.policies.list": {
+    classification: "safe-after-output-narrowing",
+    rationale:
+      "Owner routing/privacy policies may be summarized for explanation, without exposing policy-write authority.",
+  },
+  "capabilities.policies.upsert": {
+    classification: "human-or-admin-only",
+    rationale:
+      "Changes routing, privacy and managed-credential constraints; an agent cannot authorize itself by editing its policy.",
+  },
+  "capabilities.consents.list": {
+    classification: "safe-after-output-narrowing",
+    rationale:
+      "Owner consent records need a current-permission summary, not a grant/revoke action or full consent history.",
+  },
+  "capabilities.consents.grant": {
+    classification: "human-or-admin-only",
+    rationale:
+      "Records the owner's disclosure/privacy authorization; model output is never user consent.",
+  },
+  "capabilities.consents.revoke": {
+    classification: "human-or-admin-only",
+    rationale:
+      "Changes privacy permission and route eligibility; permission management remains a human action.",
+  },
+  "capabilities.operations.list": {
+    classification: "safe-after-output-narrowing",
+    rationale:
+      "Bounded owner operation metadata includes frozen route and idempotency details; project only task-relevant status.",
+  },
+  "capabilities.operations.detail": {
+    classification: "safe-after-output-narrowing",
+    rationale:
+      "Owner route/attempt/usage metadata excludes result payloads, but needs a task-scoped diagnostic projection.",
+  },
+  "capabilities.operations.cancel": {
+    classification: "requires-preview-or-compensation",
+    rationale:
+      "Cancels owner work using a revision fence; any future tool requires explicit cancellation intent and broker approval/idempotency review.",
+  },
+  "capabilities.usage.summary": {
+    classification: "safe-after-output-narrowing",
+    rationale:
+      "Owner usage/accounting aggregates need bounded task-relevant output before tool exposure.",
+  },
+  "capabilities.diagnostics.shadowMismatches": {
+    classification: "safe-after-output-narrowing",
+    rationale:
+      "Bounded owner route-mismatch diagnostics contain internal identifiers; expose only sanitized explanations.",
+  },
+};
+
 export const registryReadyToolIds = new Set<string>([
   ...BROKERED_MCP_READ_TOOL_IDS,
   ...BROKERED_MCP_MUTATION_TOOL_IDS,
@@ -183,6 +295,13 @@ function classifyOrpc(
   procedure: string,
   source: string,
 ): ExposureClassification {
+  if (source.endsWith("/capabilities.ts")) {
+    // New control-plane procedures fail closed pending explicit review below.
+    return (
+      capabilityControlPlaneExposureReview[procedure]?.classification ??
+      "human-or-admin-only"
+    );
+  }
   if (/service-keys\.ts$|admin(?:-|\.)|public\.ts$/i.test(source)) {
     return /service-keys/.test(source)
       ? "never-expose-to-agent"
@@ -192,6 +311,35 @@ function classifyOrpc(
   return looksRead(procedure)
     ? "safe-after-output-narrowing"
     : "safe-after-output-narrowing";
+}
+
+/**
+ * The source inventory follows the repository's indented object declarations
+ * (it does not dynamically import routers or execute handlers). Retain object
+ * ancestry: `connections.list` and `operations.list` are different procedures.
+ * Handler/schema objects are deeper than their procedure and are discarded on
+ * the next sibling declaration; they must not leak into its route name.
+ */
+export function directlyDeclaredOrpcPaths(
+  text: string,
+  router: string,
+): string[] {
+  const parents: Array<{ name: string; indent: number }> = [];
+  const procedures: string[] = [];
+  for (const match of text.matchAll(
+    /^([ \t]{2,})([A-Za-z][A-Za-z0-9]*):\s*(\{|protectedProcedure\b|publicProcedure\b|adminProcedure\b)/gm,
+  )) {
+    const indent = match[1]!.replaceAll("\t", "  ").length;
+    while (parents.length && parents.at(-1)!.indent >= indent) parents.pop();
+    if (match[3] === "{") {
+      parents.push({ name: match[2]!, indent });
+    } else {
+      procedures.push(
+        [router, ...parents.map(({ name }) => name), match[2]].join("."),
+      );
+    }
+  }
+  return procedures;
 }
 
 export function inventoryOrpc(root: string): OrpcAuditRow[] {
@@ -205,12 +353,7 @@ export function inventoryOrpc(root: string): OrpcAuditRow[] {
       );
       const router =
         routerMatch?.[1]?.replace(/Router$/, "") ?? basename(file, ".ts");
-      return [
-        ...text.matchAll(
-          /^\s{2,}([A-Za-z][A-Za-z0-9]*):\s*(?:protectedProcedure|publicProcedure|adminProcedure)/gm,
-        ),
-      ].map((match) => {
-        const procedure = `${router}.${match[1]}`;
+      return directlyDeclaredOrpcPaths(text, router).map((procedure) => {
         return {
           procedure,
           source,
@@ -293,6 +436,17 @@ export function renderCatalogueAudit(root: string): string {
   lines.push(
     "",
     "Every row is derived from the checked-in registration/procedure source. File-like rows require an opaque-handle projection before registry exposure.",
+  );
+  lines.push(
+    "",
+    "### Capability control-plane review",
+    "",
+    "None of these oRPC procedures is an agent tool. Authentication/ownership is not agent approval; credential, routing-policy and consent changes remain human-only.",
+    "",
+    ...Object.entries(capabilityControlPlaneExposureReview).map(
+      ([procedure, review]) =>
+        `- \`${procedure}\` — ${review.classification}: ${review.rationale}`,
+    ),
   );
   return lines.join("\n");
 }

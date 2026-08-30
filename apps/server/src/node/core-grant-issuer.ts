@@ -1,14 +1,17 @@
 import type {
   NodeCapabilityGrantClaims,
+  SignedNodeCapabilityInvocationGrant,
   NodeJobV1,
   OwnedObjectRef,
   SignedNodeCapabilityGrant,
   UnsignedNodeJobV1,
+  UnsignedNodeCapabilityInvocationGrantClaims,
 } from "@avermate/agent-contracts";
 import {
   nodeCapabilityGrantClaimsSchema,
   nodeJobV1Schema,
   unsignedNodeJobV1Schema,
+  signedNodeCapabilityInvocationGrantSchema,
 } from "@avermate/agent-contracts";
 import {
   createHash,
@@ -77,6 +80,16 @@ export class CoreNodeGrantIssuer {
       keyId: this.identity.keyId,
       signature: signProtocolValue(this.identity, claims),
     };
+  }
+
+  signCapabilityInvocation(
+    raw: UnsignedNodeCapabilityInvocationGrantClaims,
+  ): SignedNodeCapabilityInvocationGrant {
+    return signedNodeCapabilityInvocationGrantSchema.parse({
+      claims: raw,
+      keyId: this.identity.keyId,
+      signature: signProtocolValue(this.identity, raw),
+    });
   }
 
   issueOperation(input: {

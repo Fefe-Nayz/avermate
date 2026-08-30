@@ -14,12 +14,12 @@ synthétise les contrats normatifs plus spécialisés ; il ne les remplace pas.
 
 La terminologie de maturité employée dans ce document est stricte :
 
-| Terme | Signification |
-| --- | --- |
-| **Implémenté** | Un chemin d'exécution produit existe et est accessible dans le périmètre indiqué. |
-| **Configurable** | Le code existe, mais exige un provider, un consentement, une image ou un service externe. |
+| Terme                                  | Signification                                                                                   |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| **Implémenté**                         | Un chemin d'exécution produit existe et est accessible dans le périmètre indiqué.               |
+| **Configurable**                       | Le code existe, mais exige un provider, un consentement, une image ou un service externe.       |
 | **Repository complete / live blocked** | Contrats, code et tests sont présents ; la preuve d'exploitation réelle reste externe au dépôt. |
-| **Non implémenté** | L'absence a été vérifiée dans le chemin d'exécution actuel. |
+| **Non implémenté**                     | L'absence a été vérifiée dans le chemin d'exécution actuel.                                     |
 
 ## 1. Résumé en une page
 
@@ -76,16 +76,16 @@ Pour chaque ressource ou capacité :
 
 La vague a été livrée en plusieurs étapes cohérentes :
 
-| Commit | Rôle dans l'architecture |
-| --- | --- |
-| `15a8897` — `feat: establish agent platform through plan 034` | Contrats d'agent, outils, corpus, projets, assistant, actions, sandbox, Node et plan géré initial. |
-| `9e90de9` — `docs: anchor product completion plans` | Plans de clôture 035–039 et clarification des critères de vérité. |
-| `368d4ae` — `feat: complete agent platform plans 025 through 039` | Runtime de production, RAG multimodal, apprentissage, Node complet et beta gérée. |
-| `634db45` — `chore: enforce portable LF checkouts` | Portabilité des checkouts et scripts. |
-| `ef7b624` — `Harden SQLite startup and revamp assistant UX` | Démarrage SQLite concurrent, robustesse des jobs et expérience du chat. |
-| `d165679` — `feat: center study workflows around projects` | Projet transformé en véritable workspace : chat, sources, productions, recherche et progression. |
-| `d821e95` — `feat: complete advanced project RAG workflows` | Activation produit du RAG avancé, multimodalité jusqu'au modèle et sémantique des sources. |
-| `4689f16` — `feat: harden advanced project RAG lifecycle` | Reranking visuel sûr, snapshots de pièces jointes, budgets médias et publication vectorielle durcie. |
+| Commit                                                            | Rôle dans l'architecture                                                                             |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `15a8897` — `feat: establish agent platform through plan 034`     | Contrats d'agent, outils, corpus, projets, assistant, actions, sandbox, Node et plan géré initial.   |
+| `9e90de9` — `docs: anchor product completion plans`               | Plans de clôture 035–039 et clarification des critères de vérité.                                    |
+| `368d4ae` — `feat: complete agent platform plans 025 through 039` | Runtime de production, RAG multimodal, apprentissage, Node complet et beta gérée.                    |
+| `634db45` — `chore: enforce portable LF checkouts`                | Portabilité des checkouts et scripts.                                                                |
+| `ef7b624` — `Harden SQLite startup and revamp assistant UX`       | Démarrage SQLite concurrent, robustesse des jobs et expérience du chat.                              |
+| `d165679` — `feat: center study workflows around projects`        | Projet transformé en véritable workspace : chat, sources, productions, recherche et progression.     |
+| `d821e95` — `feat: complete advanced project RAG workflows`       | Activation produit du RAG avancé, multimodalité jusqu'au modèle et sémantique des sources.           |
+| `4689f16` — `feat: harden advanced project RAG lifecycle`         | Reranking visuel sûr, snapshots de pièces jointes, budgets médias et publication vectorielle durcie. |
 
 Le fil conducteur est la séparation des autorités. Les bibliothèques choisies
 — assistant-ui, AI SDK, AG-UI, LangGraph, LiteLLM, OpenSandbox ou Qdrant — sont
@@ -202,14 +202,14 @@ rétroactivement la nouvelle version du document.
 
 ## 5. Les modes de déploiement
 
-| Mode | Ce qui fonctionne | Où sont les données/credentials | Limites honnêtes |
-| --- | --- | --- | --- |
-| Développement zéro configuration | Web + Core, SQLite local, fichiers locaux, recherche lexicale, modèle mock en lecture seule | Machine du développeur | Aucun Garage, provider IA ou sandbox requis. |
-| Core scolaire hébergé | Comptes et fonctionnalités scolaires | Infrastructure Avermate | Le contrat de base ne promet ni hébergement de fichiers ni inférence IA. |
-| Core hébergé + BYOK | Core scolaire et appels directs explicitement configurés | Données scolaires sur Core ; clé scellée côté serveur ; contenu envoyé au provider choisi | Coût, rétention et disponibilité dépendent du provider. |
-| Core hébergé + Node pairé | Core scolaire hébergé, capacités privées sur le Node | Placement par ressource/capacité | Le relay Core voit le plaintext en transit ; ce n'est pas de l'E2E. Node hors ligne = capacité indisponible. |
-| Full self-host | Web + Core + Node + stockage + providers choisis par l'opérateur | Infrastructure de l'opérateur | Les images/runtime doivent encore être attestés ; Compose statique n'est pas une preuve de production. |
-| Capacité gérée Avermate | Entitlements, quotas, réservations et adaptateurs préparés | Infrastructure gérée selon politiques publiées | Désactivée : aucun checkout, facturation ou lancement public. |
+| Mode                             | Ce qui fonctionne                                                                           | Où sont les données/credentials                                                           | Limites honnêtes                                                                                             |
+| -------------------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Développement zéro configuration | Web + Core, SQLite local, fichiers locaux, recherche lexicale, modèle mock en lecture seule | Machine du développeur                                                                    | Aucun Garage, provider IA ou sandbox requis.                                                                 |
+| Core scolaire hébergé            | Comptes et fonctionnalités scolaires                                                        | Infrastructure Avermate                                                                   | Le contrat de base ne promet ni hébergement de fichiers ni inférence IA.                                     |
+| Core hébergé + BYOK              | Core scolaire et appels directs explicitement configurés                                    | Données scolaires sur Core ; clé scellée côté serveur ; contenu envoyé au provider choisi | Coût, rétention et disponibilité dépendent du provider.                                                      |
+| Core hébergé + Node pairé        | Core scolaire hébergé, capacités privées sur le Node                                        | Placement par ressource/capacité                                                          | Le relay Core voit le plaintext en transit ; ce n'est pas de l'E2E. Node hors ligne = capacité indisponible. |
+| Full self-host                   | Web + Core + Node + stockage + providers choisis par l'opérateur                            | Infrastructure de l'opérateur                                                             | Les images/runtime doivent encore être attestés ; Compose statique n'est pas une preuve de production.       |
+| Capacité gérée Avermate          | Entitlements, quotas, réservations et adaptateurs préparés                                  | Infrastructure gérée selon politiques publiées                                            | Désactivée : aucun checkout, facturation ou lancement public.                                                |
 
 `AVERMATE_DEPLOYMENT_MODE` ne possède que deux valeurs globales : `hosted` et
 `full-self-host`. « Core hébergé + Node pairé » n'est pas un troisième binaire
@@ -256,18 +256,18 @@ pas « release opératoirement prouvée ».
 
 ## 6. Frontières de confiance et matrice d'autorité
 
-| Objet | Autorité | Payload possible | Contrôle déterminant |
-| --- | --- | --- | --- |
-| Compte et session | Core | Core | Better Auth, suspension, ownership. |
-| Année/matière/note | Core | Core | Services métier et révisions. |
-| Liaison scolaire distante | Core | Core | Identité distante stable et état de synchro. |
-| Fichier canonique | Core pour le ledger | Core, Node ou managed pour les octets | Ownership, placement, digest, taille, MIME. |
-| Version/chunk/citation | Core pour identité/autorisation | Corps Core ou Node | Source/version exacte et locator. |
-| Conversation Core | Core | Core | DAG, branche, curseur et run. |
-| Conversation Node | Node | Node ; métadonnées de routage Core | Même contrat `ConversationStore`, placement explicite. |
-| Modèle | Politique Core | Provider direct, Node ou managed | Catalogue, révisions gelées et budget. |
-| Workspace | Ledger logique du placement | Object store + sandbox | Snapshot digesté, image et profil. |
-| Mutation de domaine | Core | Core | ToolBroker + action ledger + approbation. |
+| Objet                     | Autorité                        | Payload possible                      | Contrôle déterminant                                   |
+| ------------------------- | ------------------------------- | ------------------------------------- | ------------------------------------------------------ |
+| Compte et session         | Core                            | Core                                  | Better Auth, suspension, ownership.                    |
+| Année/matière/note        | Core                            | Core                                  | Services métier et révisions.                          |
+| Liaison scolaire distante | Core                            | Core                                  | Identité distante stable et état de synchro.           |
+| Fichier canonique         | Core pour le ledger             | Core, Node ou managed pour les octets | Ownership, placement, digest, taille, MIME.            |
+| Version/chunk/citation    | Core pour identité/autorisation | Corps Core ou Node                    | Source/version exacte et locator.                      |
+| Conversation Core         | Core                            | Core                                  | DAG, branche, curseur et run.                          |
+| Conversation Node         | Node                            | Node ; métadonnées de routage Core    | Même contrat `ConversationStore`, placement explicite. |
+| Modèle                    | Politique Core                  | Provider direct, Node ou managed      | Catalogue, révisions gelées et budget.                 |
+| Workspace                 | Ledger logique du placement     | Object store + sandbox                | Snapshot digesté, image et profil.                     |
+| Mutation de domaine       | Core                            | Core                                  | ToolBroker + action ledger + approbation.              |
 
 Le navigateur ne reçoit jamais :
 
@@ -486,20 +486,20 @@ La couche d'ingestion sait représenter notamment :
 - audio de cours et autres médias ;
 - documents et artefacts générés.
 
-| Entrée | Chemin principal | État corpus actuel | Maturité |
-| --- | --- | --- | --- |
-| Upload PDF/image/audio/vidéo | Upload authentifié local, S3 signé ou relay Node → `files` → Material | Index initial demandé, puis dérivés | Implémenté. |
-| Note texte | `materialDocuments.textContent` | Indexée lors d'un rattachement projet/assistant ou d'un retry, pas à la création seule | Implémenté avec retard possible. |
-| URL publique | Fetch borné → Readability/Markdown ou PDF stocké | Pas de hook corpus universel après publication | Implémenté avec retard possible. |
-| Page dynamique | Worker navigateur isolé sur Node | Stratégie explicite, jamais fallback silencieux | Configurable. |
-| YouTube | Captions publiques avec timestamps | Segments horodatés | Implémenté. |
-| YouTube sans captions | yt-dlp/FFmpeg bornés → audio → STT | Consentement, Node et attestation requis | Configurable. |
-| Moodle | Jeton mobile, cours et fichiers same-origin | Matérialisé dans Materials, sans enqueue corpus direct | Implémenté avec retard possible. |
-| Google Drive / OneDrive | OAuth, curseurs delta/changes, webhooks et tombstones | Matérialisé, sans enqueue corpus direct | Implémenté avec retard possible. |
-| Enregistrement de cours | Segmentation → transcription par segment → assemblage | Locators temporels | Implémenté. |
-| ÉcoleDirecte / PRONOTE / Skolengo | Années, matières, notes et planning | Données académiques, pas cloud documentaire | Implémenté séparément. |
-| Production structurée | Workflow d'artefact et adapter du format | Indexation structurée lorsque l'adapter existe | Implémenté selon format. |
-| Artefact binaire générique | Référence d'artefact | Titre/métadonnées ou `visual-only` | Partiel. |
+| Entrée                            | Chemin principal                                                      | État corpus actuel                                                                     | Maturité                         |
+| --------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------- |
+| Upload PDF/image/audio/vidéo      | Upload authentifié local, S3 signé ou relay Node → `files` → Material | Index initial demandé, puis dérivés                                                    | Implémenté.                      |
+| Note texte                        | `materialDocuments.textContent`                                       | Indexée lors d'un rattachement projet/assistant ou d'un retry, pas à la création seule | Implémenté avec retard possible. |
+| URL publique                      | Fetch borné → Readability/Markdown ou PDF stocké                      | Pas de hook corpus universel après publication                                         | Implémenté avec retard possible. |
+| Page dynamique                    | Worker navigateur isolé sur Node                                      | Stratégie explicite, jamais fallback silencieux                                        | Configurable.                    |
+| YouTube                           | Captions publiques avec timestamps                                    | Segments horodatés                                                                     | Implémenté.                      |
+| YouTube sans captions             | yt-dlp/FFmpeg bornés → audio → STT                                    | Consentement, Node et attestation requis                                               | Configurable.                    |
+| Moodle                            | Jeton mobile, cours et fichiers same-origin                           | Matérialisé dans Materials, sans enqueue corpus direct                                 | Implémenté avec retard possible. |
+| Google Drive / OneDrive           | OAuth, curseurs delta/changes, webhooks et tombstones                 | Matérialisé, sans enqueue corpus direct                                                | Implémenté avec retard possible. |
+| Enregistrement de cours           | Segmentation → transcription par segment → assemblage                 | Locators temporels                                                                     | Implémenté.                      |
+| ÉcoleDirecte / PRONOTE / Skolengo | Années, matières, notes et planning                                   | Données académiques, pas cloud documentaire                                            | Implémenté séparément.           |
+| Production structurée             | Workflow d'artefact et adapter du format                              | Indexation structurée lorsque l'adapter existe                                         | Implémenté selon format.         |
+| Artefact binaire générique        | Référence d'artefact                                                  | Titre/métadonnées ou `visual-only`                                                     | Partiel.                         |
 
 Chaque tentative avancée possède une révision d'ingestion avec stratégie,
 politique, limites, provenance, digest, diagnostics bornés et code d'échec
@@ -552,18 +552,21 @@ timestamps. L'extraction audio par yt-dlp/FFmpeg est un fallback opt-in,
 YouTube-only, réservé à un worker isolé. Playlists, DRM, cookies privés et flags
 arbitraires ne font pas partie du contrat.
 
-### 9.4 OCR, STT et TTS actuels
+### 9.4 OCR, STT et TTS : legacy par défaut, registry opt-in
 
-| Capacité | Core/BYOK actuel | Node/self-host actuel | Fallback |
-| --- | --- | --- | --- |
-| OCR | Mistral OCR | Tesseract + Poppler, image et données `fra`/`eng` épinglées | Jamais silencieux entre cloud et local. |
-| Transcription | API Mistral audio/Voxtral | `whisper.cpp` + poids `large-v3-turbo-q5_0` dans l'image | Node offline = erreur explicite dans le profil local. |
-| Synthèse vocale | Mistral `voxtral-mini-tts-2603` | Pas encore de worker local équivalent publié | ElevenLabs peut être enregistré/validé comme clé, mais n'est pas l'adapter TTS actif. |
+| Capacité        | Core/BYOK legacy                | Connecteurs registry compilés                              | Node/self-host                                                                               |
+| --------------- | ------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| OCR             | Mistral OCR                     | Mistral OCR                                                | Bridge Tesseract + Poppler ou sidecar conforme signé.                                        |
+| Transcription   | Mistral audio/Voxtral           | Mistral et Deepgram `nova-3` via SDK officiel              | Bridge `whisper.cpp` + poids épinglés ou sidecar conforme.                                   |
+| Synthèse vocale | Mistral `voxtral-mini-tts-2603` | Mistral et ElevenLabs `eleven_flash_v2_5` via SDK officiel | Offering de sidecar TTS si configurée ; aucun modèle local universel installé implicitement. |
 
-Le contrat de résultat de transcription accepte encore l'identifiant `openai`
-pour compatibilité de données, mais le resolver de production actuel ne
-sélectionne que Mistral ou `node-local`. Une clé OpenAI ne constitue donc pas
-aujourd'hui un troisième chemin STT actif.
+Les flags `CAPABILITY_OCR_EXECUTION`, `CAPABILITY_STT_EXECUTION` et
+`CAPABILITY_TTS_EXECUTION` valent `legacy` par défaut et acceptent `shadow` ou
+`registry`. La façade de workflow registry accepte les identités de plugins
+sans liste fermée Mistral/Node ; les données historiques restent compatibles.
+Une clé OpenAI ne constitue pas pour autant une offering STT : le plugin OpenAI
+livré expose le langage. Aucune panne locale ne provoque une escalade cloud
+sans fallback figé et consentement explicites.
 
 Le bouton « tout transcrire » crée un batch durable. L'interface suit ses
 événements par SSE, avec repli de polling, affiche une progression globale et
@@ -664,13 +667,13 @@ d'une clé.
 
 ### 10.4 Providers de retrieval
 
-| Étape | Provider/implémentation Core | Provider/implémentation Node | Remarque |
-| --- | --- | --- | --- |
-| Lexical | SQLite FTS5 | Backend lexical Node | Obligatoire. |
-| Embedding multimodal | Gemini `gemini-embedding-2` avec consentement BYOK | Endpoints OpenAI-compatible, TEI ou Gemini représentés dans la configuration Node | Espace, dimensions et révision immuables. |
-| Vector store | Qdrant configuré | Pas encore d'espace vectoriel local exposé par le protocole Node v2 | Accélération optionnelle, jamais source de vérité. |
-| Reranking cloud | Cohere v4 avec consentement BYOK | — | Reçoit les candidats textuels. |
-| Reranking local | TEI/GTE ou Qwen3 épinglé | Endpoint et image/révision attestés | Le mode hybride sans reranker reste possible. |
+| Étape                | Provider/implémentation Core                       | Provider/implémentation Node                                                      | Remarque                                           |
+| -------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Lexical              | SQLite FTS5                                        | Backend lexical Node                                                              | Obligatoire.                                       |
+| Embedding multimodal | Gemini `gemini-embedding-2` avec consentement BYOK | Endpoints OpenAI-compatible, TEI ou Gemini représentés dans la configuration Node | Espace, dimensions et révision immuables.          |
+| Vector store         | Qdrant configuré                                   | Pas encore d'espace vectoriel local exposé par le protocole Node v2               | Accélération optionnelle, jamais source de vérité. |
+| Reranking cloud      | Cohere v4 avec consentement BYOK                   | —                                                                                 | Reçoit les candidats textuels.                     |
+| Reranking local      | TEI/GTE ou Qwen3 épinglé                           | Endpoint et image/révision attestés                                               | Le mode hybride sans reranker reste possible.      |
 
 Il n'existe pas d'adapter Voyage dans le runtime actuel ; il ne doit pas être
 déduit des contrats génériques de reranking.
@@ -708,11 +711,11 @@ peut donc plus « gagner à la fin » contre un index plus récent.
 
 ### 10.6 Sémantique des sources de projet
 
-| `contextMode` | Retrieval automatique | Recherche demandée par l'agent | Pièce jointe explicite |
-| --- | --- | --- | --- |
-| `include` | Oui | Oui | Oui si jointe. |
-| `on-demand` | Non | Oui | Oui si jointe. |
-| `exclude` | Non | Non dans le corpus du projet | Possible uniquement comme scope explicite autorisé. |
+| `contextMode` | Retrieval automatique | Recherche demandée par l'agent | Pièce jointe explicite                              |
+| ------------- | --------------------- | ------------------------------ | --------------------------------------------------- |
+| `include`     | Oui                   | Oui                            | Oui si jointe.                                      |
+| `on-demand`   | Non                   | Oui                            | Oui si jointe.                                      |
+| `exclude`     | Non                   | Non dans le corpus du projet   | Possible uniquement comme scope explicite autorisé. |
 
 `on-demand` signifie « ne pas précharger dans chaque réponse », et non « ne
 jamais transmettre au provider d'embedding ». Dans un projet avancé, une source
@@ -909,23 +912,30 @@ Mistral, OpenAI, des modèles annoncés par un Node et du modèle de développem
 LiteLLM est l'option de routage multi-provider du Node/full-self-host ; il n'est
 pas obligatoire et le resolver Core actuel ne lui délègue pas tous les appels.
 
-### 13.2 Catalogue de chat actuel
+### 13.2 Catalogue du chemin de chat legacy
 
-| Route | Modèle exposé actuellement | Credential | Placement |
-| --- | --- | --- | --- |
-| Mock dev | `mock-readonly` | Aucun | Core, jamais annoncé en production. |
-| Mistral BYOK | `mistral-small-latest` | Clé utilisateur | `direct-byok`. |
-| Mistral instance | `mistral-small-latest` | Clé opérateur de l'instance | Core. |
-| Mistral managed | `mistral-small-latest` | Pool opérateur comptabilisé | Beta gérée désactivée. |
-| OpenAI BYOK/instance | `gpt-4.1-mini` | Clé utilisateur ou instance | Direct/Core. |
-| OpenRouter BYOK/instance | `openai/gpt-4.1-mini` | Clé utilisateur ou instance | Direct/Core. |
-| Node | Catalogue text-capable signé par le Node | Coffre Node | Node pairé. |
+| Route                    | Modèle exposé actuellement               | Credential                  | Placement                           |
+| ------------------------ | ---------------------------------------- | --------------------------- | ----------------------------------- |
+| Mock dev                 | `mock-readonly`                          | Aucun                       | Core, jamais annoncé en production. |
+| Mistral BYOK             | `mistral-small-latest`                   | Clé utilisateur             | `direct-byok`.                      |
+| Mistral instance         | `mistral-small-latest`                   | Clé opérateur de l'instance | Core.                               |
+| Mistral managed          | `mistral-small-latest`                   | Pool opérateur comptabilisé | Beta gérée désactivée.              |
+| OpenAI BYOK/instance     | `gpt-4.1-mini`                           | Clé utilisateur ou instance | Direct/Core.                        |
+| OpenRouter BYOK/instance | `openai/gpt-4.1-mini`                    | Clé utilisateur ou instance | Direct/Core.                        |
+| Node                     | Catalogue text-capable signé par le Node | Coffre Node                 | Node pairé.                         |
 
 Le choix de modèle est une décision de policy, pas une chaîne libre. Les
 préférences peuvent privilégier Core ou Node, ou exiger le managed. Le run
 persiste modèle, provider, révisions, placement et liste ordonnée de fallbacks.
 Un fallback absent au dispatch est sauté ; un modèle non gelé n'est pas
 substitué. Un run non managed ne bascule pas vers un coût managed.
+
+Lorsque `CAPABILITY_LANGUAGE_EXECUTION=registry`, le sélecteur assistant utilise
+les offerings langage configurées et autorisées du compte plutôt que ce
+catalogue legacy. Chaque clé `capability:<offeringId>` épingle une offering et
+sa connexion exactes ; elle ne choisit pas silencieusement une autre connexion
+portant le même nom de modèle. Cette projection ne lance pas de probe réseau.
+Le catalogue ci-dessus reste utilisé en legacy et shadow.
 
 ### 13.3 Les clés configurables ne signifient pas toutes « adapter actif »
 
@@ -938,8 +948,16 @@ est plus précise :
 - OpenRouter : chat via endpoint OpenAI-compatible ;
 - Gemini : embeddings multimodaux ;
 - Cohere : reranking ;
-- ElevenLabs : stockage/validation de clé et préparation UI, mais aucun chemin
-  TTS de production ne le sélectionne encore.
+- ElevenLabs : clé historique conservée et adapter TTS registry opérationnel
+  dans le dépôt ; la nouvelle connexion doit être configurée pour l'utiliser.
+
+La page **AI & Processing** ajoute les connexions du registre, notamment
+Deepgram STT et les connecteurs LiteLLM/Hugging Face text-only. La projection
+des clés legacy y est read-only : elle ne crée pas automatiquement des
+offerings ou des consentements. Les connecteurs LiteLLM et Hugging Face ne
+représentent pas toutes les APIs de ces services : modèle/révision explicites,
+suffixe de provider fixé chez HF et deployment unique sans fallback caché chez
+LiteLLM. Voir la [matrice exacte](./capability-registry/inventory.md).
 
 Cette nuance est volontairement documentée pour ne pas confondre « secret
 enregistrable » et « provider branché de bout en bout ».
@@ -1013,13 +1031,13 @@ flowchart TB
     W -. compatible seulement .-> R
 ```
 
-| Historique | Restaure | Ne restaure pas |
-| --- | --- | --- |
-| Conversation | Messages, edits, retries et branche choisie | Fichiers, grades ou état interne du provider. |
-| Harness | État de graphe, interruption et continuation | Filesystem et base métier. |
-| Workspace | Fichiers commités d'une branche | Conversation et notes. |
-| Action ledger | Ordre des mutations et compensations | Actions externes non compensables. |
-| Runtime checkpoint | VM/container compatible plus vite | État portable ou autorité de conversation. |
+| Historique         | Restaure                                     | Ne restaure pas                               |
+| ------------------ | -------------------------------------------- | --------------------------------------------- |
+| Conversation       | Messages, edits, retries et branche choisie  | Fichiers, grades ou état interne du provider. |
+| Harness            | État de graphe, interruption et continuation | Filesystem et base métier.                    |
+| Workspace          | Fichiers commités d'une branche              | Conversation et notes.                        |
+| Action ledger      | Ordre des mutations et compensations         | Actions externes non compensables.            |
+| Runtime checkpoint | VM/container compatible plus vite            | État portable ou autorité de conversation.    |
 
 Le bouton conceptuel « revenir à ce message » doit donc présenter un aperçu
 coordonné de plusieurs restaurations. Aucun `checkpointRef` générique ne peut
@@ -1129,38 +1147,45 @@ la base de données d'un fournisseur de paiement ne crée jamais un entitlement.
 
 Le Core scolaire, BYOK, MCP, Node et full self-host ne dépendent pas de ce plan.
 
-## 18. Vers un vrai système de connecteurs IA multi-provider
+## 18. Registre de capacités et connecteurs IA multi-provider
 
-### 18.1 Ce que l'architecture permet déjà
+### 18.1 Plan de contrôle livré
 
-Les fondations sont favorables :
+Le registre Avermate est l'autorité de routage des chemins activés en
+`registry`. Les sept familles migrées restent `legacy` par défaut et passent
+indépendamment par `shadow` puis `registry`. Le master shadow ne remplace pas
+un override de famille explicite. Le registre sépare :
 
-- `ModelGateway` normalise les modèles de chat ;
-- les providers d'embedding et reranking ont leurs contrats propres ;
-- les clés sont liées à un provider et une capacité ;
-- le Node publie un catalogue signé de modèles et révisions ;
-- les placements BYOK, Core, Node et managed sont explicites ;
-- les fallbacks sont gelés et audités ;
-- OpenAI-compatible couvre de nombreux serveurs locaux ;
-- LiteLLM peut router un catalogue full-self-host sans devenir l'autorité.
+- le **plugin compilé et revu**, qui décrit les schémas et construit l'adapter ;
+- la **connexion**, possédée par une instance, un utilisateur ou un Node ;
+- l'**offering immuable**, qui fige modèle, révision, modalités, limites et
+  frontière de données ;
+- la **policy**, qui choisit automatiquement, épingle ou ordonne une route par
+  capability et `purpose` ;
+- l'**opération durable**, ses tentatives, son usage et sa santé.
 
-Ce n'est toutefois pas encore un registre universel piloté uniquement par
-configuration. Le resolver Core de chat connaît explicitement Mistral, OpenAI
-et OpenRouter ; OCR/STT/TTS ont aussi leurs branches précises. Ajouter
-Anthropic, Groq, Azure, Ollama, vLLM ou un provider image demande encore un
-adapter et une entrée produit revus.
+Les chemins registry branchés couvrent langage, embeddings, reranking, STT,
+TTS, OCR et extraction native PDF. Les contrats incluent aussi image/vidéo,
+mais leurs workflows restent legacy ; tous les formats documentaires ne sont
+pas convertis à `document.extract`. `CapabilityBackedModelGateway` conserve la
+façade du chat et ses événements. Les branches et variables legacy ne sont pas
+encore supprimées.
 
-### 18.2 Direction recommandée, sans l'implémenter dans ce lot
+Une entrée de catalogue n'est pas une promesse d'exécution : sans factory et
+adapter compilés dans le Core, la validation et la découverte échouent
+explicitement. Aucun package, module distant ou `providerOptions` libre fourni
+par un utilisateur n'est chargé dans le SaaS.
 
-La bonne abstraction future n'est pas « une clé API générique ». Il faut un
-registre de capacités :
+### 18.2 Flux d'exécution autoritaire en mode registry
 
 ```mermaid
 flowchart TB
-    UI[Configurateur de providers]
-    PR[ProviderRegistry]
-    SC[Secret + consentement + origine exacte]
-    CR[CapabilityRouter]
+    UI[Connexions + policies]
+    PR[ProviderPluginRegistry statique]
+    SC[Credentials + consentements + origine exacte]
+    CR[PolicyResolver + RoutePlanner]
+    OP[Operation + route immuable]
+    EX[CapabilityExecutor]
 
     CHAT[Chat / reasoning / tools]
     EMB[Embedding]
@@ -1168,47 +1193,94 @@ flowchart TB
     OCR[OCR]
     STT[STT]
     TTS[TTS]
-    IMG[Image / vidéo]
+    PDF[Extraction PDF native]
 
     BYOK[BYOK direct]
-    CORE[Clé instance]
+    CORE[Core déterministe sans clé]
     NODE[Node / OpenAI-compatible]
     LLM[LiteLLM]
-    MAN[Managed]
+    MAN[Managed si provisionné et autorisé]
 
-    UI --> PR --> SC --> CR
-    CR --> CHAT
-    CR --> EMB
-    CR --> RR
-    CR --> OCR
-    CR --> STT
-    CR --> TTS
-    CR --> IMG
+    UI --> PR --> SC --> CR --> OP --> EX
+    EX --> CHAT
+    EX --> EMB
+    EX --> RR
+    EX --> OCR
+    EX --> STT
+    EX --> TTS
+    EX --> PDF --> CORE
     CHAT --> BYOK
-    CHAT --> CORE
     CHAT --> NODE
     CHAT --> LLM
-    CHAT --> MAN
+    CHAT -. réservation obligatoire .-> MAN
 ```
 
-Chaque enregistrement devrait déclarer :
+Une offering et les read models associés distinguent :
 
 - capability et modalités ;
 - protocole/adaptateur et origine exacte ;
 - schéma de secret, validation et révocation ;
-- catalogue de modèles et révisions ;
+- modèle précis et révisions ;
 - contexte, outils, structured output et multimodalité ;
 - rétention, entraînement, région, consentement et disclosure ;
-- coût, unités, rate limits et usage fiable ;
+- limites et unités d'usage ; les coûts upstream inconnus restent inconnus ;
 - placements permis ;
-- santé, attestation et raison d'indisponibilité ;
+- santé à durée bornée, attestation et raison d'indisponibilité ;
 - formats de fallback compatibles.
 
-OpenRouter resterait un connecteur pratique. LiteLLM resterait un agrégateur
-opérationnel très utile en self-host ou multi-tenant. Les endpoints
-OpenAI-compatible resteraient le pont vers Ollama/vLLM/TEI et services
-similaires. Aucun de ces trois ne doit remplacer le `CapabilityRouter`, le
-ToolBroker, l'ownership ou les politiques Avermate.
+OpenRouter reste un connecteur de langage. Son chemin registry épingle
+`openai/gpt-4.1-mini` sur le seul upstream OpenAI, désactive le fallback provider
+et les listes alternatives de modèles et valide le token sur un endpoint
+authentifié. Les plugins LiteLLM/Hugging Face
+livrés ici sont des connecteurs chat text-only, sans tools, vision ou
+génération média annoncés. Ils exigent un upstream explicite, pas un catalogue
+automatique de tâches. LiteLLM nécessite une déclaration opérateur de deployment
+unique sans retries/fallbacks ; les flags envoyés renforcent ce prérequis sans
+attester la configuration interne du proxy. Les endpoints compatibles privés
+passent par le Node. Aucun de ces services ne remplace le routeur de
+capabilities, le ToolBroker, l'ownership ou les politiques Avermate.
+
+Les changements de configuration, rotations et désactivations retirent
+atomiquement les anciennes offerings. Une revalidation réussie d'une connexion
+déjà prête conserve ses offerings épinglées. Après réactivation, il faut
+redécouvrir puis mettre à jour les pins concernés ; les snapshots historiques
+ne sont pas réécrits. Les listes filtrent révisions obsolètes et expirations.
+
+La santé a un TTL de cinq minutes, avec renouvellement à la demande et états
+distincts `degraded`, `offline`, `unauthorized` et `disabled`. Les diagnostics
+shadow sont bornés en mémoire du processus ; ils ne sont pas le ledger durable.
+Le résultat, l'usage et l'état terminé sont persistés atomiquement, avec rejet
+des replays divergents. Le broker managed réserve les quotas avant dispatch ;
+sans broker, sans borne suffisante ou sans contrat de quota, il refuse l'appel.
+Le coût exact n'est pas universellement connu et aucun pool managed n'est
+provisionné automatiquement par le registre.
+
+Le protocole Node transporte réellement les inputs média vers le stockage
+Node et vérifie puis adopte les outputs avant publication Core. Les sidecars
+utilisent un contrat de fichiers borné et des références de secrets locales,
+pas des chemins Core supposés lisibles. L'idempotence et les fences ne
+dispensent pas des preuves externes du Node et du worker déployés.
+
+Les écritures `CapabilityArtifactIo.write` et l'adoption des sorties d'inférence
+Node par `CapabilityArtifactIo.adopt` préservent le stockage choisi Node/local/S3
+avec une adoption durable en deux phases. Les métadonnées restent canoniques
+dans le Core dans les deux cas ; les octets n'y résident pas nécessairement. Les transferts
+ambigus retiennent leurs inputs et bloquent le retry automatique ; les outputs
+restent disponibles si leur adoption échoue.
+
+La page de diagnostic permet d'inspecter et d'annuler une opération. Il n'y a
+pas de retry générique à partir de son seul ID : relancer depuis le workflow
+d'origine reconstruit l'entrée et les nouvelles captures d'autorité. Un état
+`inspect-required` doit être examiné avant toute relance facturable.
+
+Les scopes avancés sont représentés dans les contrats/resolvers, mais l'API
+publique de policy est user-scoped et celle de connexion refuse les placements
+opérateur. La conversion du bootstrap opérateur et la suppression legacy sont
+prévues en phase 14 après la release de compatibilité. Le catalogue exhaustif,
+les workflows image/vidéo et l'extraction généralisée restent des écarts
+explicites par rapport à l'audit cible. Les détails de
+rollout et preuves attendues figurent dans le
+[guide opérateur](./capability-registry/operator-guide.md).
 
 ### 18.3 Pourquoi ne pas tout faire passer par OpenRouter
 
@@ -1228,19 +1300,19 @@ niveau de chaque adapter.
 
 ## 19. Sécurité et comportements de panne
 
-| Situation | Comportement attendu |
-| --- | --- |
-| Node hors ligne | `placement unavailable`, jamais faux 404 ni miroir plaintext Core. |
-| Provider sans clé | Modèle/capacité absent ou `missing-key`. |
-| Consentement embeddings/rerank révoqué | Publication et requête fenced ; lexical reste disponible. |
-| Reranker indisponible avec fallback autorisé | Hybrid lexical+dense sans rerank. |
-| Pièce jointe non indexable | Aucune prétention de lecture et aucun élargissement global implicite. |
-| Ancien job d'embedding termine tard | Génération `superseded`, jamais active. |
-| Sandbox sans attestation | Capacité non annoncée et job refusé. |
-| Suppression Node non reçue | Tombstone Core + état distant en attente. |
-| Provider ambigu après dispatch | Réservation conservée/réconciliée, usage non inventé. |
-| Modèle propose une écriture | ToolBroker, approbation et révision obligatoires. |
-| Provider ne donne pas l'usage | Valeur `unknown`, jamais zéro inventé. |
+| Situation                                    | Comportement attendu                                                  |
+| -------------------------------------------- | --------------------------------------------------------------------- |
+| Node hors ligne                              | `placement unavailable`, jamais faux 404 ni miroir plaintext Core.    |
+| Provider sans clé                            | Modèle/capacité absent ou `missing-key`.                              |
+| Consentement embeddings/rerank révoqué       | Publication et requête fenced ; lexical reste disponible.             |
+| Reranker indisponible avec fallback autorisé | Hybrid lexical+dense sans rerank.                                     |
+| Pièce jointe non indexable                   | Aucune prétention de lecture et aucun élargissement global implicite. |
+| Ancien job d'embedding termine tard          | Génération `superseded`, jamais active.                               |
+| Sandbox sans attestation                     | Capacité non annoncée et job refusé.                                  |
+| Suppression Node non reçue                   | Tombstone Core + état distant en attente.                             |
+| Provider ambigu après dispatch               | Réservation conservée/réconciliée, usage non inventé.                 |
+| Modèle propose une écriture                  | ToolBroker, approbation et révision obligatoires.                     |
+| Provider ne donne pas l'usage                | Valeur `unknown`, jamais zéro inventé.                                |
 
 Les endpoints de modèle hébergés sont limités à des origines HTTPS publiques
 approuvées. Les credentials dans l'URL, loopback, réseaux privés, link-local,
@@ -1310,7 +1382,8 @@ Web/Core/base/Qdrant/LiteLLM/OpenSandbox.
 - lancement commercial du managed ;
 - checkout/facturation et décisions juridiques/tarifaires ;
 - une éventuelle promesse de relay E2E ;
-- registre universel de providers piloté par configuration ;
+- gate live réel de chaque nouvelle révision d'adapter/provider avant activation
+  managed par défaut ;
 - un scope Learning réellement propre à chaque projet.
 
 ## 21. Carte des sources de vérité dans le dépôt
@@ -1321,20 +1394,20 @@ conceptuelle, puis preuves de release. Un plan marqué « terminé » ou un Comp
 valide ne peut donc pas contredire un chemin d'exécution absent ni remplacer une
 preuve live.
 
-| Sujet | Contrat/document | Implémentation principale |
-| --- | --- | --- |
-| Décisions IA | [`ai-architecture-v2.md`](./ai-architecture-v2.md) | `packages/agent-contracts`, `apps/server/src/agent`, `apps/server/src/assistant`. |
-| Node | [`avermate-node-protocol.md`](./avermate-node-protocol.md) | `apps/node`, `apps/server/src/node`, `packages/agent-contracts/src/node*.ts`. |
-| Self-host | [`self-hosting.md`](./self-hosting.md) | `infra/compose`, `infra/node`, `deploy.yml`. |
-| Managed | [`managed-plane.md`](./managed-plane.md) | `apps/server/src/managed`, `entitlements`, `usage`, `billing`, Web settings/admin. |
-| Storage | [`materials-storage.md`](./materials-storage.md) | schémas `files`, `materials`, storage providers et routes upload. |
-| Corpus/RAG | [`retrieval-evaluation-028.md`](./retrieval-evaluation-028.md) | `apps/server/src/search`, jobs corpus, schéma `corpus.ts`, projets Web. |
-| Ingestion/artifacts | [`advanced-ingestion-and-media-studio.md`](./advanced-ingestion-and-media-studio.md) | `apps/server/src/ingestion`, workers/jobs, Media Studio Web. |
-| Sandbox | [`sandbox-runtime.md`](./sandbox-runtime.md) | `apps/server/src/sandbox`, `apps/sandbox-worker`, schéma `sandbox.ts`. |
-| Outils | [`tool-catalogue-027.md`](./tool-catalogue-027.md) | `apps/server/src/tools`, `actions`, adapters embedded/MCP. |
-| MCP | [`mcp.md`](./mcp.md) | `apps/server/src/mcp`, routes OAuth/MCP, paramètres intégrations. |
-| Learning | plan 037 | `apps/server/src/learning`, schéma `learning.ts`, composants Web Learning/Project. |
-| Providers | ce document + catalogue | `apps/server/src/assistant/services.ts`, `catalogue.ts`, `service-keys.ts`, `search/*provider*`, config Node. |
+| Sujet                     | Contrat/document                                                                                                                                | Implémentation principale                                                                                                                    |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Décisions IA              | [`ai-architecture-v2.md`](./ai-architecture-v2.md)                                                                                              | `packages/agent-contracts`, `apps/server/src/agent`, `apps/server/src/assistant`.                                                            |
+| Node                      | [`avermate-node-protocol.md`](./avermate-node-protocol.md)                                                                                      | `apps/node`, `apps/server/src/node`, `packages/agent-contracts/src/node*.ts`.                                                                |
+| Self-host                 | [`self-hosting.md`](./self-hosting.md)                                                                                                          | `infra/compose`, `infra/node`, `deploy.yml`.                                                                                                 |
+| Managed                   | [`managed-plane.md`](./managed-plane.md)                                                                                                        | `apps/server/src/managed`, `entitlements`, `usage`, `billing`, Web settings/admin.                                                           |
+| Storage                   | [`materials-storage.md`](./materials-storage.md)                                                                                                | schémas `files`, `materials`, storage providers et routes upload.                                                                            |
+| Corpus/RAG                | [`retrieval-evaluation-028.md`](./retrieval-evaluation-028.md)                                                                                  | `apps/server/src/search`, jobs corpus, schéma `corpus.ts`, projets Web.                                                                      |
+| Ingestion/artifacts       | [`advanced-ingestion-and-media-studio.md`](./advanced-ingestion-and-media-studio.md)                                                            | `apps/server/src/ingestion`, workers/jobs, Media Studio Web.                                                                                 |
+| Sandbox                   | [`sandbox-runtime.md`](./sandbox-runtime.md)                                                                                                    | `apps/server/src/sandbox`, `apps/sandbox-worker`, schéma `sandbox.ts`.                                                                       |
+| Outils                    | [`tool-catalogue-027.md`](./tool-catalogue-027.md)                                                                                              | `apps/server/src/tools`, `actions`, adapters embedded/MCP.                                                                                   |
+| MCP                       | [`mcp.md`](./mcp.md)                                                                                                                            | `apps/server/src/mcp`, routes OAuth/MCP, paramètres intégrations.                                                                            |
+| Learning                  | plan 037                                                                                                                                        | `apps/server/src/learning`, schéma `learning.ts`, composants Web Learning/Project.                                                           |
+| Providers et capacités IA | [`adr/040-capability-registry.md`](./adr/040-capability-registry.md) + [`capability-registry/inventory.md`](./capability-registry/inventory.md) | `packages/agent-contracts/src/capability*.ts`, `apps/server/src/capabilities`, `apps/node/src/capabilities`, paramètres Web AI & Processing. |
 
 ## 22. Conclusion
 
@@ -1350,8 +1423,12 @@ de panne. C'est ce qui permet de faire évoluer le catalogue de providers sans
 donner à un agrégateur, un modèle ou une sandbox l'autorité sur les données
 scolaires.
 
-À court terme, il n'est donc pas nécessaire de remplacer l'architecture par
-OpenRouter. Il faut conserver OpenRouter comme une bonne route de chat, LiteLLM
-comme une bonne option de routage self-host/managed et généraliser ensuite le
-registre de capacités pour que chaque utilisateur choisisse, séparément, son
-chat, ses embeddings, son reranker, son OCR, son STT, son TTS et ses renderers.
+OpenRouter reste une route explicite de génération de langage et LiteLLM une
+connexion optionnelle de proxy ; aucun des deux n'est le routeur interne
+d'Avermate. Le registre de capacités décrit dans
+[`ADR 040`](./adr/040-capability-registry.md) choisit séparément le chat, les
+embeddings, le reranking, l'OCR, la transcription, la synthèse vocale et
+l'extraction PDF lorsque la famille est activée en registry. Image/vidéo
+restent des contrats non branchés et les flags gardent le legacy par défaut.
+Chaque opération registry fige la politique, les offerings, les versions de
+credentials et les consentements qui l'ont autorisée.

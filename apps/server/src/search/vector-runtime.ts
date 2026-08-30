@@ -29,6 +29,7 @@ import {
 } from "./gemini-embedding";
 import { readEmbeddingPublicationFence } from "./embedding-publication-fence";
 import { canonicalJson, sha256 } from "./values";
+import { CapabilityBackedEmbeddingProvider } from "../capabilities/adapters/embedding";
 
 type Fetcher = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
@@ -692,13 +693,16 @@ export function createConfiguredCorpusVectorRuntime(
     placementDescriptor: "node",
     ...(options.nodeProviderFetch ? { fetch: options.nodeProviderFetch } : {}),
   });
+  const routedEmbedding = ownerId
+    ? new CapabilityBackedEmbeddingProvider(ownerId, embedding)
+    : embedding;
   return {
-    embedding,
+    embedding: routedEmbedding,
     vector: new QdrantVectorIndex({
       baseUrl: environment.CORPUS_VECTOR_URL!,
       apiKey: environment.CORPUS_VECTOR_API_KEY,
       collectionPrefix: environment.CORPUS_VECTOR_COLLECTION_PREFIX,
-      descriptor: embedding.descriptor(),
+      descriptor: routedEmbedding.descriptor(),
       ownerId,
     }),
   };
@@ -844,8 +848,12 @@ export async function createOwnedCorpusVectorRuntime(
       return { bytes: new Uint8Array(bytes), mediaType: file.mimeType };
     },
   });
-  return {
+  const routedEmbedding = new CapabilityBackedEmbeddingProvider(
+    ownerId,
     embedding,
+  );
+  return {
+    embedding: routedEmbedding,
     consent,
     authorizeEmbedding: async () => {
       await authorizePublication();
@@ -863,7 +871,7 @@ export async function createOwnedCorpusVectorRuntime(
       baseUrl: environment.CORPUS_VECTOR_URL!,
       apiKey: environment.CORPUS_VECTOR_API_KEY,
       collectionPrefix: environment.CORPUS_VECTOR_COLLECTION_PREFIX,
-      descriptor: embedding.descriptor(),
+      descriptor: routedEmbedding.descriptor(),
       ownerId,
     }),
   };

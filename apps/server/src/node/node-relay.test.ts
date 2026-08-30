@@ -1,9 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createClient, type Client } from "@libsql/client";
 import type {
+  NodeCapabilityOffering,
   NodeCapabilityManifestV2,
   NodeControlFrame,
   SignedNodeCapabilityGrant,
+} from "@avermate/agent-contracts";
+import {
+  nodeCapabilityRequestDigestPayload,
+  nodeCapabilityRequestV1Schema,
 } from "@avermate/agent-contracts";
 import { generateKeyPairSync } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -17,7 +22,13 @@ import {
   type DispatchNodeOperationInput,
 } from "./node-relay";
 import { SqlRelayOperationJournal } from "./node-relay-repository";
-import { signProtocolValue, type ProtocolSigningIdentity } from "./protocol-crypto";
+import {
+  protocolDigest,
+  signProtocolValue,
+  verifyProtocolValue,
+  type ProtocolSigningIdentity,
+} from "./protocol-crypto";
+import { CoreNodeGrantIssuer } from "./core-grant-issuer";
 
 let client: Client;
 let registry: CoreNodeRegistry;
@@ -25,6 +36,7 @@ let relay: CoreNodeRelay;
 let credential: string;
 let manifest: NodeCapabilityManifestV2;
 let nodeSigner: ProtocolSigningIdentity;
+let inferenceOffering: NodeCapabilityOffering;
 let now: Date;
 let nodeId: string;
 const databasePath = join(
@@ -117,6 +129,60 @@ beforeAll(async () => {
   ).toString("base64url");
   nodeId = `node_${crypto.randomUUID()}`;
   nodeSigner = { keyId: `ed25519_${crypto.randomUUID()}`, privateKey: nodeKeys.privateKey };
+  const inferenceDescriptor = {
+    schemaVersion: 1 as const,
+    id: "node-offering-rerank-relay",
+    connectionId: "node-internal-rerank",
+    connectionRevision: 1,
+    pluginId: "node.fixture.rerank",
+    pluginVersion: "1",
+    adapterRevision: "fixture-v1",
+    capabilityProtocolVersion: 1 as const,
+    provider: "node-fixture",
+    modelId: "rerank-fixture",
+    modelRevision: "weights-1",
+    placement: {
+      kind: "node" as const,
+      nodeId,
+      configRevision: `sha256:${"a".repeat(64)}` as const,
+    },
+    dataHandling: {
+      egress: "none" as const,
+      providerName: null,
+      region: null,
+      disclosureRevision: "node-local-v1",
+      retentionDisclosureRevision: null,
+      trainingDisclosureRevision: null,
+      requiresExplicitConsent: false,
+    },
+    limits: {
+      maxInputBytes: 1_000_000,
+      maxOutputBytes: 1_000_000,
+      maxBatchSize: 100,
+      maxConcurrency: 2,
+    },
+    supportedLanguages: "unknown" as const,
+    healthCheckKind: "node-attested" as const,
+    capability: "rerank.score" as const,
+    specification: {
+      modalities: ["text" as const],
+      maxCandidates: 100,
+      maxTokensPerCandidate: 8_192,
+      languages: "multilingual" as const,
+      scoreSemantics: "relative" as const,
+    },
+  };
+  inferenceOffering = {
+    descriptor: inferenceDescriptor,
+    descriptorDigest: protocolDigest(inferenceDescriptor),
+    runtime: {
+      implementation: "fixture",
+      runtimeRevision: "runtime-1",
+      imageDigest: null,
+      modelRevision: inferenceDescriptor.modelRevision,
+    },
+    network: { egressPolicyDigest: `sha256:${"b".repeat(64)}` },
+  };
   const unsignedManifest = {
     protocol: "avermate-node/2" as const,
     nodeId,
@@ -128,6 +194,13 @@ beforeAll(async () => {
         version: 1 as const,
         kinds: ["specialist.opencode@1"],
         maxConcurrent: 2,
+      },
+      inference: {
+        version: 1 as const,
+        offerings: [inferenceOffering],
+        invocationModes: ["unary-relay" as const, "stream-relay" as const],
+        maxConcurrent: 2,
+        secretCustody: "node-local" as const,
       },
     },
     limits: {
@@ -168,7 +241,7 @@ beforeAll(async () => {
            manifestDigest, state, claimedUserId, confirmedCapabilitiesJson,
            expiresAt, createdAt, updatedAt)
           VALUES ('pair-1', ?, 'sha256:code', '{}', 'sha256:proof',
-            'sha256:manifest', 'consumed', 'user-1', '["conversations","jobs"]', ?, ?, ?)`,
+            'sha256:manifest', 'consumed', 'user-1', '["conversations","jobs","inference"]', ?, ?, ?)`,
         args: [nodeId, timestamp + 3_600, timestamp, timestamp],
       },
       {
@@ -340,6 +413,152 @@ describe("CoreNodeRelay", () => {
     await expect(relay.dispatchOperation(input)).rejects.toThrow(
       "NODE_OPERATION_GRANT_BINDING_INVALID",
     );
+  });
+
+  test("relays a signed offering-scoped Node capability request and verifies its bindings", async () => {
+    const placeholder = nodeCapabilityRequestV1Schema.parse({
+      schemaVersion: 1,
+      operationId: "operation-capability-v1",
+      ownerId: "user-1",
+      capability: "rerank.score",
+      purpose: "search.query-rerank",
+      offeringId: inferenceOffering.descriptor.id,
+      offeringDigest: inferenceOffering.descriptorDigest,
+      configRevision: manifest.configRevision,
+      requestDigest: `sha256:${"0".repeat(64)}`,
+      inputArtifacts: [],
+      input: {
+        schemaVersion: 1,
+        query: "query",
+        candidates: [{ id: "candidate-1", text: "candidate" }],
+        topK: 1,
+      },
+    });
+    const request = nodeCapabilityRequestV1Schema.parse({
+      ...placeholder,
+      requestDigest: protocolDigest(
+        nodeCapabilityRequestDigestPayload(placeholder),
+      ),
+    });
+    const deadline = new Date(now.getTime() + 30_000).toISOString();
+    const issuer = new CoreNodeGrantIssuer("relay-capability-secret-".repeat(2));
+    const grant = issuer.signCapabilityInvocation({
+      schemaVersion: 1,
+      issuer: "avermate-core",
+      audience: nodeId,
+      subject: "user-1",
+      ownerId: "user-1",
+      nodeId,
+      operationId: request.operationId,
+      offeringId: request.offeringId,
+      offeringDigest: request.offeringDigest,
+      configRevision: request.configRevision,
+      requestDigest: request.requestDigest,
+      inputArtifacts: [],
+      limits: {
+        cpuMillis: 30_000,
+        memoryBytes: 512 * 1024 * 1024,
+        inputBytes: 1_000_000,
+        outputBytes: 1_000_000,
+        tokenLimit: 10_000,
+        costMinorLimit: 1_000,
+        deadline,
+      },
+      egressPolicyDigest: inferenceOffering.network.egressPolicyDigest,
+      notBefore: now.toISOString(),
+      expiresAt: deadline,
+      issuedAt: now.toISOString(),
+      jti: "node-capability-grant-1",
+    });
+    const pending = relay.requestCapability({
+      userId: "user-1",
+      nodeId,
+      request,
+      grant,
+    });
+    let dispatched: Extract<NodeControlFrame, { type: "operation-request" }> | undefined;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const candidate = socket.frames().find(
+        (frame) =>
+          frame.type === "operation-request" &&
+          frame.operationId === request.operationId,
+      );
+      if (candidate?.type === "operation-request") {
+        dispatched = candidate;
+        break;
+      }
+      await Bun.sleep(5);
+    }
+    expect(dispatched).toMatchObject({
+      capability: "inference",
+      operation: "capability.invoke",
+      configRevision: manifest.configRevision,
+      payload: { ownerId: "user-1", input: request },
+    });
+    expect(
+      verifyProtocolValue(
+        issuer.publicSigningKey,
+        grant.claims,
+        grant.signature,
+      ),
+    ).toBe(true);
+
+    const usage = {
+      version: 1 as const,
+      items: [{ unit: "candidate" as const, quantity: "1", source: "measured" as const }],
+      cost: {
+        amountMinor: null,
+        currency: null,
+        authoritative: false,
+        pricingSnapshotId: null,
+      },
+    };
+    const result = {
+      schemaVersion: 1 as const,
+      scores: [{ id: "candidate-1", score: 0.9, rank: 0 }],
+      usage,
+      providerMetadata: null,
+    };
+    const outputArtifacts: [] = [];
+    const payload = {
+      schemaVersion: 1 as const,
+      operationId: request.operationId,
+      offeringId: request.offeringId,
+      requestDigest: request.requestDigest,
+      outputDigest: protocolDigest({ result, outputArtifacts }),
+      result,
+      outputArtifacts,
+      usage,
+      providerRequestId: "node-request-1",
+    };
+    await connection.receive(
+      JSON.stringify({
+        type: "operation-result",
+        frameId: "frame-capability-result",
+        nodeId,
+        connectionEpoch: epoch,
+        operationId: request.operationId,
+        sequence: 1,
+        ok: true,
+        payload,
+        retryable: false,
+        terminal: false,
+      }),
+    );
+    await connection.receive(
+      JSON.stringify({
+        type: "operation-result",
+        frameId: "frame-capability-terminal",
+        nodeId,
+        connectionEpoch: epoch,
+        operationId: request.operationId,
+        sequence: 2,
+        ok: true,
+        retryable: false,
+        terminal: true,
+      }),
+    );
+    expect(await pending).toEqual(payload);
   });
 
   test("offers a manifest-fenced job and acknowledges only its consumed completion", async () => {

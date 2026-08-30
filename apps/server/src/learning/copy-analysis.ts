@@ -55,12 +55,12 @@ export async function runResolvedGradeCopyOcr(
   file: { blob: Blob; name: string },
   options: { signal?: AbortSignal; operationId?: string; attempt?: number },
   dependencies: {
-    resolveProvider?: (userId: string) => Promise<OcrProvider>;
+    resolveProvider?: typeof resolveOcrProvider;
   } = {},
 ) {
   const provider = await (
     dependencies.resolveProvider ?? resolveOcrProvider
-  )(userId);
+  )(userId, { purpose: "learning.copy-analysis" });
   return {
     result: await provider.run(file, options),
     provider: provider.id,
@@ -378,7 +378,7 @@ export async function runGradeCopyAnalysisJob(
         attempt: options.attempts,
       },
     );
-    const ocrProvider = z.enum(["mistral", "node-local"]).parse(ocr.provider);
+    const ocrProvider = z.enum(["mistral", "node-local", "capability-registry"]).parse(ocr.provider);
     const ocrModel = z.string().trim().min(1).max(512).parse(ocr.model);
     options.signal?.throwIfAborted();
     const proposal = buildCopyProposal(ocr.result, objectives);

@@ -64,7 +64,7 @@ const finalizePayloadSchema = z
 export const segmentJobResultSchema = z
   .object({
     segmentId: z.string().min(1),
-    provider: z.enum(["mistral", "openai", "node-local"]),
+    provider: z.enum(["mistral", "openai", "deepgram", "node-local", "capability-registry"]),
     model: z.string().trim().min(1).max(512),
     text: z.string(),
     segments: z

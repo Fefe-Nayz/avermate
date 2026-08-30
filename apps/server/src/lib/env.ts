@@ -100,6 +100,33 @@ export const env = createEnv({
     TRANSCRIPTION_PROVIDER: z.enum(["mistral", "node"]).default("mistral"),
     OCR_PROVIDER: z.enum(["mistral", "node"]).default("mistral"),
     TTS_PROVIDER: z.enum(["mistral"]).default("mistral"),
+    /**
+     * Capability rollout modes are deliberately per family. `shadow` resolves
+     * and compares a registry route but still executes the legacy path once;
+     * it must never issue a second provider request.
+     */
+    CAPABILITY_REGISTRY_SHADOW: bool,
+    CAPABILITY_TTS_EXECUTION: z
+      .enum(["legacy", "shadow", "registry"])
+      .default("legacy"),
+    CAPABILITY_STT_EXECUTION: z
+      .enum(["legacy", "shadow", "registry"])
+      .default("legacy"),
+    CAPABILITY_OCR_EXECUTION: z
+      .enum(["legacy", "shadow", "registry"])
+      .default("legacy"),
+    CAPABILITY_DOCUMENT_EXTRACTION_EXECUTION: z
+      .enum(["legacy", "shadow", "registry"])
+      .default("legacy"),
+    CAPABILITY_RERANK_EXECUTION: z
+      .enum(["legacy", "shadow", "registry"])
+      .default("legacy"),
+    CAPABILITY_EMBEDDING_EXECUTION: z
+      .enum(["legacy", "shadow", "registry"])
+      .default("legacy"),
+    CAPABILITY_LANGUAGE_EXECUTION: z
+      .enum(["legacy", "shadow", "registry"])
+      .default("legacy"),
     TTS_MODEL: z.string().min(1).default("voxtral-mini-tts-2603"),
     /** Optional preset/custom Mistral voice id; empty uses the provider default. */
     TTS_VOICE_ID: z.string().min(1).optional(),

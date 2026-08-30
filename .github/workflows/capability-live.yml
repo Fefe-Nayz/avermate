@@ -1,0 +1,103 @@
+name: Capability provider live gates
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: capability-live-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CI: "true"
+  DATABASE_URL: ${{ secrets.CAPABILITY_LIVE_DATABASE_URL }}
+  BETTER_AUTH_URL: https://capability-live.invalid
+  BETTER_AUTH_SECRET: ${{ secrets.CAPABILITY_LIVE_BETTER_AUTH_SECRET }}
+  CLIENT_URL: https://capability-live.invalid
+  API_INTERNAL_URL: https://capability-live.invalid
+  NEXT_PUBLIC_API_URL: https://capability-live.invalid
+  NEXT_PUBLIC_APP_URL: https://capability-live.invalid
+  DISABLE_EMAIL: "true"
+  DISABLE_UPLOADS: "false"
+  DISABLE_JOBS: "true"
+  CAPABILITY_TTS_EXECUTION: registry
+  CAPABILITY_STT_EXECUTION: registry
+  CAPABILITY_OCR_EXECUTION: registry
+  CAPABILITY_DOCUMENT_EXTRACTION_EXECUTION: registry
+  CAPABILITY_RERANK_EXECUTION: registry
+  CAPABILITY_EMBEDDING_EXECUTION: registry
+  CAPABILITY_LANGUAGE_EXECUTION: registry
+
+jobs:
+  live:
+    name: capability-live-${{ matrix.gate }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: capability-live
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - gate: language
+            capability: language.generate
+            purpose: assistant.chat
+            offeringVariable: CAPABILITY_LIVE_LANGUAGE_OFFERING_ID
+            inputSecret: CAPABILITY_LIVE_LANGUAGE_INPUT_JSON
+          - gate: embedding
+            capability: embedding.generate
+            purpose: corpus.query-embedding
+            offeringVariable: CAPABILITY_LIVE_EMBEDDING_OFFERING_ID
+            inputSecret: CAPABILITY_LIVE_EMBEDDING_INPUT_JSON
+          - gate: stt
+            capability: speech.transcribe
+            purpose: recordings.course-transcription
+            offeringVariable: CAPABILITY_LIVE_STT_OFFERING_ID
+            inputSecret: CAPABILITY_LIVE_STT_INPUT_JSON
+          - gate: tts
+            capability: speech.synthesize
+            purpose: media.podcast-narration
+            offeringVariable: CAPABILITY_LIVE_TTS_OFFERING_ID
+            inputSecret: CAPABILITY_LIVE_TTS_INPUT_JSON
+          - gate: ocr
+            capability: document.ocr
+            purpose: materials.ocr
+            offeringVariable: CAPABILITY_LIVE_OCR_OFFERING_ID
+            inputSecret: CAPABILITY_LIVE_OCR_INPUT_JSON
+          - gate: node
+            capability: speech.transcribe
+            purpose: node.capability-conformance
+            offeringVariable: CAPABILITY_LIVE_NODE_OFFERING_ID
+            inputSecret: CAPABILITY_LIVE_NODE_INPUT_JSON
+    env:
+      CAPABILITY_LIVE_OWNER_ID: ${{ vars.CAPABILITY_LIVE_OWNER_ID }}
+      CAPABILITY_LIVE_OFFERING_ID: ${{ vars[matrix.offeringVariable] }}
+      CAPABILITY_LIVE_INPUT_JSON: ${{ secrets[matrix.inputSecret] }}
+      CAPABILITY_LIVE_KIND: ${{ matrix.capability }}
+      CAPABILITY_LIVE_PURPOSE: ${{ matrix.purpose }}
+      CAPABILITY_LIVE_EVIDENCE_PATH: ${{ github.workspace }}/evidence/capability-live-${{ matrix.gate }}.json
+      CAPABILITY_LIVE_RUN_ID: gha-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.gate }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.0
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Execute one real provider operation through the frozen registry route
+        run: bun run capability:live
+
+      - name: Publish machine-readable evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: capability-live-${{ matrix.gate }}-${{ github.run_id }}
+          path: evidence/capability-live-${{ matrix.gate }}.json
+          if-no-files-found: error
+          retention-days: 30

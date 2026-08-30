@@ -120,6 +120,21 @@ afterEach(async () => {
 }, 30_000);
 
 describe("CoreObjectAdoptionRepository", () => {
+  test.each(["course-media", "grade-copy", "document-artifact"])("durably preserves %s purpose and the selected Node canonical provider", async (purpose) => {
+    const bytes = new TextEncoder().encode("owned immutable source");
+    const provider = new TestProvider();
+    const canonicalProvider = "node:node_fixture:relay-storage-v1";
+    const repository = new CoreObjectAdoptionRepository(client, { managedProvider: canonicalProvider });
+    const intent = { adoptionId: `input-${purpose}`, providerId: provider.id, ref: { ownerId: "owner-1", namespace: purpose, key: `source-${purpose}` }, byteSize: bytes.length, mimeType: purpose === "course-media" ? "audio/webm" : "image/jpeg", expectedDigest: digest(bytes), idempotencyKey: `write-${purpose}` };
+    const first = await new TwoPhaseObjectAdopter({ provider: provider as unknown as ObjectStorageProvider, repository }).upload({ ...intent, body: body(bytes) });
+    const replay = await new TwoPhaseObjectAdopter({ provider: provider as unknown as ObjectStorageProvider, repository: new CoreObjectAdoptionRepository(client, { managedProvider: canonicalProvider }) }).upload({ ...intent, body: body(bytes) });
+    expect(replay.record.canonicalRecordId).toBe(first.record.canonicalRecordId);
+    const rows = (await client.execute("SELECT purpose, provider FROM files")).rows;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.purpose).toBe(purpose);
+    expect(rows[0]?.provider).toBe(canonicalProvider);
+  });
+
   test("recovers a crash after provider commit without duplicate bytes or canonical rows", async () => {
     const bytes = new TextEncoder().encode("durable node artifact");
     const provider = new TestProvider();

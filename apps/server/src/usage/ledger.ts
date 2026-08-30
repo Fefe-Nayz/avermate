@@ -117,21 +117,35 @@ export type UsageSettlementInput = {
   evidenceRef?: string;
 };
 
+export type UsageExpirySettlement = Pick<
+  UsageSettlementInput,
+  "actualQuantity" | "outcome" | "authoritative" | "evidenceRef"
+>;
+
+export type UsageExpirySettlementResolver = (
+  reservation: UsageReservationV1,
+) => Promise<UsageExpirySettlement | undefined>;
+
 export class UsageLedger {
   readonly #client: EntitlementSqlClient;
   readonly #entitlements: EntitlementService;
   readonly #clock: () => Date;
   readonly #audit: SecurityAuditWriter;
+  readonly #expirySettlement?: UsageExpirySettlementResolver;
   #writeTail: Promise<void> = Promise.resolve();
 
   constructor(
     client: EntitlementSqlClient,
     entitlements: EntitlementService,
-    options: { clock?: () => Date } = {},
+    options: {
+      clock?: () => Date;
+      expirySettlement?: UsageExpirySettlementResolver;
+    } = {},
   ) {
     this.#client = client;
     this.#entitlements = entitlements;
     this.#clock = options.clock ?? (() => new Date());
+    this.#expirySettlement = options.expirySettlement;
     this.#audit = new SecurityAuditWriter(client, this.#clock);
   }
 
@@ -517,21 +531,27 @@ export class UsageLedger {
 
   async reconcileExpired(limit = 250) {
     const rows = await this.#client.execute({
-      sql: `SELECT id, accountId FROM usage_reservations
+      sql: `SELECT * FROM usage_reservations
         WHERE status = 'reserved' AND expiresAt <= ?
         ORDER BY expiresAt ASC LIMIT ?`,
       args: [seconds(this.#clock()), Math.max(1, Math.min(limit, 1_000))],
     });
     const settled: string[] = [];
     for (const row of rows.rows as Row[]) {
+      const reservation = reservationFromRow(row);
+      // A capability adapter can persist pre-dispatch evidence separately from
+      // the usage ledger. Resolver failures intentionally leave the reservation
+      // outstanding: an unavailable proof store must never become a free run.
+      const resolution = await this.#expirySettlement?.(reservation);
       await this.settle({
-        accountId: String(row.accountId),
-        reservationId: String(row.id),
-        actualQuantity: "0",
-        outcome: "expired",
-        authoritative: false,
+        accountId: reservation.accountId,
+        reservationId: reservation.id,
+        actualQuantity: resolution?.actualQuantity ?? "0",
+        outcome: resolution?.outcome ?? "expired",
+        authoritative: resolution?.authoritative ?? false,
+        evidenceRef: resolution?.evidenceRef,
       });
-      settled.push(String(row.id));
+      settled.push(reservation.id);
     }
     return settled;
   }

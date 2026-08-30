@@ -10,6 +10,80 @@ hybrid Avermate Node shape, where selected user-owned capabilities are paired
 with an academic account hosted on `avermate.fr`. They share contracts and
 adapters but keep distinct data authority and release evidence.
 
+Provider inference has the same versioned capability contracts in every
+deployment, with registry execution enabled per family. The public connection
+API accepts direct BYOK or an actively owned paired Node; it does not grant
+operator authority to create `core`, `managed` or `full-self-host` placements.
+There is no general operator-key bootstrap into this registry yet. Its narrow
+internal bootstrap creates only credential-free native PDF extraction.
+OpenRouter, LiteLLM and Hugging Face are explicit connections, not hidden global
+routers. See
+[`adr/040-capability-registry.md`](adr/040-capability-registry.md) for routing,
+credential custody, consent, fallback and operation-ledger invariants.
+
+## Capability-registry rollout
+
+Defaults are conservative and independent of the hosting profile:
+
+```env
+CAPABILITY_REGISTRY_SHADOW=false
+CAPABILITY_TTS_EXECUTION=legacy
+CAPABILITY_STT_EXECUTION=legacy
+CAPABILITY_OCR_EXECUTION=legacy
+CAPABILITY_DOCUMENT_EXTRACTION_EXECUTION=legacy
+CAPABILITY_RERANK_EXECUTION=legacy
+CAPABILITY_EMBEDDING_EXECUTION=legacy
+CAPABILITY_LANGUAGE_EXECUTION=legacy
+NODE_CAPABILITY_PROTOCOL_V1=false
+```
+
+The seven execution flags accept `legacy`, `shadow` or `registry`. The master
+shadow flag affects only families without an explicit override; explicitly
+setting every family to `legacy` prevents that master from upgrading them.
+Shadow resolves existing routes without a second provider call or artifact
+write, then executes the legacy path once. Registry never falls back silently
+to legacy. Image/video workflows remain legacy and have no registry execution
+flag. Deterministic extraction currently covers native PDF, not every document
+format in the broader contract.
+
+Create a registry connection, validate it, discover offerings, review disclosures
+and configure policies before changing a family's mode. Legacy environment
+variables and encrypted service keys remain supported by legacy paths; their
+read-only UI projection does not create executable registry offerings. Rotate
+or reconfigure a connection, then validate and rediscover its current offerings and
+update pinned policies. A successful repeat validation of an already-ready
+connection does not invalidate its pins. Health expires after five minutes and
+is probed on demand; the UI readiness check is not a continuously running probe.
+
+Compiled cloud adapters include Mistral TTS/STT/OCR, ElevenLabs TTS and Deepgram
+STT, plus the language/embedding/reranking connectors in the
+[inventory](capability-registry/inventory.md). LiteLLM and Hugging Face plugins
+are text-only chat connections with pinned models/revisions, not universal
+upstream task catalogues. HF requires an explicit provider suffix; LiteLLM
+requires a single-deployment proxy with hidden retries/fallbacks disabled.
+Hosted Core rejects private compatible endpoints: expose local inference
+through a paired Node instead of passing a private address to the user API.
+
+Enable `NODE_CAPABILITY_PROTOCOL_V1` in the Node process and configure
+`capabilities.sidecars` only for sidecars implementing the bounded Avermate
+protocol. Pin Compose images by digest and keep secret references in the local
+Node secret store. Media input bytes are staged on Node, and outputs are
+verified/adopted before Core publication. `CapabilityArtifactIo.write` and
+`CapabilityArtifactIo.adopt` preserve the selected Node/local/S3 storage with
+durable two-phase adoption; canonical Core file metadata does not imply
+Core-hosted bytes. See the [Node artifact protocol](capability-registry/node-artifact-protocol.md).
+A sidecar cannot use a Core file path as if it were a shared volume. The local
+OCR/STT worker bridges still require
+their image/runtime evidence. Zero-cloud-key development is supported without
+AI; a fully local processing profile additionally needs the configured local
+models/workers and healthy-host evidence.
+
+Managed usage is optional and separate: a broker must reserve supported quotas
+before dispatch and conservatively settle uncertain work. No managed pool is
+automatically activated by a registry flag. Unknown provider prices remain
+unknown. Inspect ambiguous outcomes before relaunching from the original
+workflow; there is no generic capability-operation retry endpoint.
+
 ## Deployment modes
 
 | Mode                                  | Current status                | Data and execution boundary                                                                                                                                                       |

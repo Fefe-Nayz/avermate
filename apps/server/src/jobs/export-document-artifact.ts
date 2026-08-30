@@ -12,7 +12,7 @@ import { NonRetryableJobError } from "../lib/jobs";
 import { quizContentSchema } from "../lib/study-document-content";
 import { renderStudyDocumentMarkdown } from "../lib/study-document-transclusion";
 import { deleteFile, storeFile } from "../lib/storage";
-import { runMistralTextToSpeech } from "../lib/text-to-speech";
+import { textToSpeech } from "../lib/text-to-speech";
 import { recordUnownedFileCleanup } from "./ingest-link";
 
 export const EXPORT_DOCUMENT_ARTIFACT_JOB_KIND = "export.documentArtifact";
@@ -179,7 +179,7 @@ export async function runExportDocumentArtifactJob(
     signal?: AbortSignal;
     storeFile?: typeof storeFile;
     deleteFile?: typeof deleteFile;
-    textToSpeech?: typeof runMistralTextToSpeech;
+    textToSpeech?: typeof textToSpeech;
     operationId?: string;
     /** Durable queue attempt; attempts after a crashed lease may reclaim `running`. */
     attempt?: number;
@@ -266,6 +266,7 @@ export async function runExportDocumentArtifactJob(
     let extension: "tsv" | "html" | "mp3";
     let mimeType: "text/tab-separated-values" | "text/html" | "audio/mpeg";
     let metaJson: Record<string, unknown> | null = null;
+    let generatedFile: { id: string; byteSize: number } | null = null;
     if (isAudio) {
       const rendered = await renderStudyDocumentMarkdown({
         userId: source.document.userId,
@@ -277,7 +278,7 @@ export async function runExportDocumentArtifactJob(
         ...source.document,
         bodyMarkdown: rendered.markdown,
       });
-      const speech = await (options.textToSpeech ?? runMistralTextToSpeech)(
+      const speech = await (options.textToSpeech ?? textToSpeech)(
         source.document.userId,
         narration,
         { operationId: options.operationId, signal: options.signal },
@@ -285,8 +286,11 @@ export async function runExportDocumentArtifactJob(
       content = Uint8Array.from(speech.audio).buffer as ArrayBuffer;
       extension = "mp3";
       mimeType = speech.mimeType;
+      generatedFile = speech.artifactFileId
+        ? { id: speech.artifactFileId, byteSize: speech.audio.byteLength }
+        : null;
       metaJson = {
-        provider: "mistral",
+        provider: speech.provider ?? "mistral",
         model: speech.model,
         voiceId: speech.voiceId,
         chunkCount: speech.chunkCount,
@@ -302,12 +306,14 @@ export async function runExportDocumentArtifactJob(
       mimeType = isAnki ? "text/tab-separated-values" : "text/html";
     }
     const name = `${safeFileStem(source.document.title)}.${extension}`;
-    const stored = await (options.storeFile ?? storeFile)({
-      userId: source.document.userId,
-      purpose: "document-artifact",
-      file: new File([content], name, { type: mimeType }),
-      nameHint: name,
-    });
+    const stored =
+      generatedFile ??
+      (await (options.storeFile ?? storeFile)({
+        userId: source.document.userId,
+        purpose: "document-artifact",
+        file: new File([content], name, { type: mimeType }),
+        nameHint: name,
+      }));
     try {
       const [published] = await db
         .update(documentArtifacts)

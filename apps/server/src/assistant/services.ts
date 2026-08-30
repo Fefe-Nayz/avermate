@@ -3,6 +3,8 @@ import type {
   ModelDescriptor,
   ModelCapability,
   ModelReadiness,
+  ModelGateway,
+  ModelRequest,
 } from "@avermate/agent-contracts";
 import { db } from "../db";
 import { OpenAICompatibleGateway } from "../agent/model-gateways";
@@ -78,6 +80,9 @@ import { createHash } from "node:crypto";
 import { nodePlacementMigrationReady } from "../node/readiness";
 import { registerPlacementMigrationAdapter } from "../node/placement-migration-adapters";
 import type { OwnedStoredFile } from "../lib/owned-file-storage";
+import { CapabilityBackedModelGateway } from "../capabilities/adapters/language-generation";
+import { capabilityExecutionMode } from "../capabilities/runtime";
+import { registryAssistantSelections } from "./registry-model-catalogue";
 
 const mockGateway = new MockReadOnlyModelGateway();
 const managedModelRegistry = new ManagedModelPolicyRegistry(
@@ -121,6 +126,40 @@ const contextAssetResolver = new OwnedFileContextAssetResolver({
   },
 });
 
+function capabilityLanguageInputModalities(descriptor: ModelDescriptor) {
+  return [
+    "text" as const,
+    ...(descriptor.modalities.includes("image") ? (["image"] as const) : []),
+    ...(descriptor.modalities.includes("file") ? (["pdf"] as const) : []),
+  ];
+}
+
+async function capabilityAssistantWorkflowScope(request: ModelRequest) {
+  const result = await db.$client.execute({
+    sql: `SELECT thread.projectId, project.id AS ownedProjectId FROM assistant_runs run
+      JOIN assistant_threads thread ON thread.id = run.threadId
+        AND thread.userId = run.userId
+      LEFT JOIN study_projects project ON project.id = thread.projectId
+        AND project.userId = run.userId AND project.deletedAt IS NULL
+      WHERE run.id = ? AND run.userId = ? AND thread.deletedAt IS NULL LIMIT 1`,
+    args: [request.runId, request.ownerId],
+  });
+  const row = result.rows[0];
+  if (!row) throw new Error("CAPABILITY_ASSISTANT_RUN_SCOPE_NOT_FOUND");
+  if (row.projectId && !row.ownedProjectId) {
+    throw new Error("CAPABILITY_ASSISTANT_PROJECT_SCOPE_NOT_OWNED");
+  }
+  return {
+    workflowId: "assistant.chat",
+    ...(row.projectId ? { projectId: String(row.projectId) } : {}),
+  };
+}
+
+const capabilityLanguageDependencies = {
+  contextAssetResolver,
+  workflowScope: capabilityAssistantWorkflowScope,
+};
+
 function nodeModelKey(nodeId: string, modelId: string) {
   const node = createHash("sha256").update(nodeId).digest("hex").slice(0, 16);
   const model = createHash("sha256").update(modelId).digest("hex").slice(0, 32);
@@ -130,7 +169,7 @@ function nodeModelKey(nodeId: string, modelId: string) {
 type PairedNodeSelection = {
   capability: ModelCapability;
   descriptor: ModelDescriptor;
-  gateway: NodeModelGateway;
+  gateway: ModelGateway;
   modelRevision: string;
   providerRevision: string;
   modelPlacement: {
@@ -182,6 +221,10 @@ async function pairedNodeModelSelections(
       if (!descriptor.modalities.includes("text")) continue;
       const modelRevision = models.revisions[descriptor.id];
       if (!modelRevision) continue;
+      const providerKey = `node-${createHash("sha256")
+        .update(state.nodeId)
+        .digest("hex")
+        .slice(0, 16)}`;
       const modalities = descriptor.modalities.filter(
         (modality): modality is "text" | "image" | "audio" =>
           modality === "text" || modality === "image" || modality === "audio",
@@ -189,10 +232,7 @@ async function pairedNodeModelSelections(
       selections.push({
         capability: {
           modelKey: nodeModelKey(state.nodeId, descriptor.id),
-          providerKey: `node-${createHash("sha256")
-            .update(state.nodeId)
-            .digest("hex")
-            .slice(0, 16)}`,
+          providerKey,
           label: `${descriptor.displayName} — Node`,
           placement: "node",
           modalities,
@@ -210,7 +250,16 @@ async function pairedNodeModelSelections(
           privacyUrl: null,
         },
         descriptor,
-        gateway,
+        gateway: new CapabilityBackedModelGateway(
+          gateway,
+          (modelId) => ({
+            provider: providerKey,
+            modelId,
+            modelRevision,
+            inputModalities: capabilityLanguageInputModalities(descriptor),
+          }),
+          capabilityLanguageDependencies,
+        ),
         modelRevision,
         providerRevision: `node-relay/2:${state.configRevision}`,
         modelPlacement: {
@@ -229,7 +278,7 @@ const mistralDescriptor: ModelDescriptor = {
   id: "mistral-small-latest",
   provider: "mistral",
   displayName: "Mistral Small",
-  modalities: ["text", "image"],
+  modalities: ["text", "image", "file"],
   capabilities: {
     tools: true,
     reasoningSummary: false,
@@ -243,7 +292,7 @@ const openAiDescriptor: ModelDescriptor = {
   id: "gpt-4.1-mini",
   provider: "openai",
   displayName: "GPT-4.1 mini",
-  modalities: ["text", "image"],
+  modalities: ["text", "image", "file"],
   capabilities: {
     tools: true,
     reasoningSummary: false,
@@ -272,32 +321,43 @@ function compatibleSelection(input: {
     | typeof OPENAI_INSTANCE_ASSISTANT_MODEL
     | typeof OPENROUTER_INSTANCE_ASSISTANT_MODEL;
 }) {
+  const modelRevision = `${input.descriptor.id}/2026-08-22`;
+  const gateway = new OpenAICompatibleGateway({
+    baseUrl: input.baseUrl,
+    providerName:
+      input.credential.source === "user"
+        ? `${input.provider}-byok`
+        : `${input.provider}-instance`,
+    credential: {
+      origin: input.origin,
+      headerName: "Authorization",
+      value: `Bearer ${input.credential.key}`,
+    },
+    endpointPolicy: {
+      placement: "hosted-core",
+      allowedOrigins: [input.origin],
+    },
+    models: [input.descriptor],
+    contextAssetResolver,
+  });
   return {
     capability:
       input.credential.source === "user"
         ? input.userCapability
         : input.instanceCapability,
     descriptor: input.descriptor,
-    gateway: new OpenAICompatibleGateway({
-      baseUrl: input.baseUrl,
-      providerName:
-        input.credential.source === "user"
-          ? `${input.provider}-byok`
-          : `${input.provider}-instance`,
-      credential: {
-        origin: input.origin,
-        headerName: "Authorization",
-        value: `Bearer ${input.credential.key}`,
-      },
-      endpointPolicy: {
-        placement: "hosted-core",
-        allowedOrigins: [input.origin],
-      },
-      models: [input.descriptor],
-      contextAssetResolver,
-    }),
+    gateway: new CapabilityBackedModelGateway(
+      gateway,
+      (modelId) => ({
+        provider: input.provider,
+        modelId,
+        modelRevision,
+        inputModalities: capabilityLanguageInputModalities(input.descriptor),
+      }),
+      capabilityLanguageDependencies,
+    ),
     contextMediaDelivery: "server-resolved" as const,
-    modelRevision: `${input.descriptor.id}/2026-08-22`,
+    modelRevision,
     providerRevision: `${input.provider}-openai-compatible/1`,
     modelPlacement:
       input.credential.source === "user"
@@ -316,6 +376,32 @@ function compatibleSelection(input: {
 
 class ProductionGatewayResolver implements AssistantGatewayResolver {
   async list(ownerId: string) {
+    if (capabilityExecutionMode("language.generate") === "registry") {
+      const [selections, preference] = await Promise.all([
+        registryAssistantSelections(ownerId, capabilityLanguageDependencies),
+        assistantModelPreferenceService.get(ownerId),
+      ]);
+      const models = selections
+        .map((selection) => selection.capability)
+        .filter(
+          (model) =>
+            preference.route !== "managed-only" ||
+            model.placement === "managed",
+        );
+      const preferred =
+        preference.route === "prefer-node"
+          ? "node"
+          : preference.route === "prefer-core"
+            ? "core"
+            : null;
+      return preferred
+        ? models.toSorted(
+            (left, right) =>
+              Number(right.placement === preferred) -
+              Number(left.placement === preferred),
+          )
+        : models;
+    }
     // The deterministic gateway is a local-development/test fixture. Never
     // advertise synthetic answers as a production model.
     const models: ModelCapability[] =
@@ -400,6 +486,8 @@ class ProductionGatewayResolver implements AssistantGatewayResolver {
       }),
     );
     const modelKeys = new Set(available.map((model) => model.modelKey));
+    if (capabilityExecutionMode("language.generate") === "registry")
+      return ready;
     if (!modelKeys.has(MISTRAL_ASSISTANT_MODEL.modelKey)) {
       ready.push({
         capability: MISTRAL_ASSISTANT_MODEL,
@@ -538,6 +626,25 @@ class ProductionGatewayResolver implements AssistantGatewayResolver {
     const preference = enforceCurrentPreference
       ? await assistantModelPreferenceService.get(ownerId)
       : null;
+    if (capabilityExecutionMode("language.generate") === "registry") {
+      const selection = (
+        await registryAssistantSelections(
+          ownerId,
+          capabilityLanguageDependencies,
+        )
+      ).find((candidate) => candidate.capability.modelKey === modelKey);
+      if (!selection)
+        throw new Error("CAPABILITY_ASSISTANT_OFFERING_UNAVAILABLE");
+      if (
+        preference?.route === "managed-only" &&
+        selection.capability.placement !== "managed"
+      ) {
+        throw new Error(
+          "The configured model policy requires managed placement",
+        );
+      }
+      return selection;
+    }
     if (
       preference?.route === "managed-only" &&
       modelKey !== MISTRAL_MANAGED_ASSISTANT_MODEL.modelKey
@@ -648,23 +755,34 @@ class ProductionGatewayResolver implements AssistantGatewayResolver {
         throw new Error("Managed model placement is unavailable");
       }
       await managedModelRegistry.require(ownerId, mistralDescriptor.id);
+      const meteredGateway = new MeteredModelGateway(
+        directGateway,
+        managedModelRegistry,
+        managedUsage(),
+        `managed-model-${env.MANAGED_REGION}`,
+        () => new Date(),
+        (capability, provider, maximumQuantity, unit) =>
+          managedCostControls.assertAllowed({
+            accountId: ownerId,
+            capability,
+            provider,
+            maximumQuantity,
+            unit,
+          }),
+      );
       return {
         capability: MISTRAL_MANAGED_ASSISTANT_MODEL,
         descriptor: mistralDescriptor,
-        gateway: new MeteredModelGateway(
-          directGateway,
-          managedModelRegistry,
-          managedUsage(),
-          `managed-model-${env.MANAGED_REGION}`,
-          () => new Date(),
-          (capability, provider, maximumQuantity, unit) =>
-            managedCostControls.assertAllowed({
-              accountId: ownerId,
-              capability,
-              provider,
-              maximumQuantity,
-              unit,
-            }),
+        gateway: new CapabilityBackedModelGateway(
+          meteredGateway,
+          (modelId) => ({
+            provider: "mistral",
+            modelId,
+            modelRevision: "mistral-small-latest/2026-08-22",
+            inputModalities:
+              capabilityLanguageInputModalities(mistralDescriptor),
+          }),
+          capabilityLanguageDependencies,
         ),
         contextMediaDelivery: "server-resolved" as const,
         modelRevision: "mistral-small-latest/2026-08-22",
@@ -683,7 +801,16 @@ class ProductionGatewayResolver implements AssistantGatewayResolver {
           ? MISTRAL_ASSISTANT_MODEL
           : MISTRAL_INSTANCE_ASSISTANT_MODEL,
       descriptor: mistralDescriptor,
-      gateway: directGateway,
+      gateway: new CapabilityBackedModelGateway(
+        directGateway,
+        (modelId) => ({
+          provider: "mistral",
+          modelId,
+          modelRevision: "mistral-small-latest/2026-08-22",
+          inputModalities: capabilityLanguageInputModalities(mistralDescriptor),
+        }),
+        capabilityLanguageDependencies,
+      ),
       contextMediaDelivery: "server-resolved" as const,
       modelRevision: "mistral-small-latest/2026-08-22",
       providerRevision: "mistral-openai-compatible/1",

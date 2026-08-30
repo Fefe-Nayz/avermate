@@ -4,11 +4,72 @@ import {
   defaultDevZeroConfig,
   loadNodeConfig,
   nodeConfigSchema,
+  nodeCapabilitySidecarConfigSchema,
   publicConfig,
   serializeNodeConfig,
 } from "./config";
 import { parse } from "yaml";
 import { fileURLToPath } from "node:url";
+
+function sidecarConfig() {
+  const imageDigest = `sha256:${"9".repeat(64)}`;
+  return nodeCapabilitySidecarConfigSchema.parse({
+    id: "speech-sidecar",
+    enabled: true,
+    descriptor: {
+      schemaVersion: 1,
+      connectionRevision: 1,
+      pluginId: "avermate.node.sidecar",
+      pluginVersion: "sidecar-plugin-r1",
+      adapterRevision: "sidecar-adapter-r1",
+      capability: "speech.transcribe",
+      capabilityProtocolVersion: 1,
+      provider: "local-speech",
+      modelId: "local-speech-model",
+      modelRevision: "local-speech-model-r1",
+      dataHandling: {
+        egress: "owner-node",
+        providerName: null,
+        region: null,
+        disclosureRevision: "node-sidecar-v1",
+        retentionDisclosureRevision: null,
+        trainingDisclosureRevision: null,
+        requiresExplicitConsent: false,
+      },
+      limits: {
+        maxInputBytes: 32 * 1024 * 1024,
+        maxOutputBytes: 8 * 1024 * 1024,
+        maxBatchSize: 1,
+        maxConcurrency: 1,
+      },
+      supportedLanguages: "unknown",
+      healthCheckKind: "active-probe",
+      specification: {
+        modes: ["batch"],
+        timestamps: ["none", "segment"],
+        diarization: false,
+        languageDetection: true,
+        languageHint: true,
+        vocabularyHints: false,
+        inputMimeTypes: ["audio/mpeg", "audio/wav"],
+        maxBytes: 32 * 1024 * 1024,
+        maxDurationSeconds: 7_200,
+        maximumSpeakers: null,
+      },
+    },
+    invocationModes: ["artifact-job"],
+    baseUrl: "http://speech-sidecar:8080",
+    secretRef: "secret:speech-sidecar",
+    runtimeRevision: "speech-runtime-r1",
+    imageDigest,
+    egressPolicyDigest: `sha256:${"8".repeat(64)}`,
+    health: { timeoutMs: 2_000 },
+    compose: {
+      image: `ghcr.io/avermate/speech-sidecar:v1@${imageDigest}`,
+      containerPort: 8_080,
+    },
+  });
+}
 
 describe("node config", () => {
   const profileEnvironment = {
@@ -100,6 +161,38 @@ describe("node config", () => {
     expect(publicValue.sandbox.providerSecretRef).toBe("configured");
     expect(publicValue.sandbox.evidenceSecretRef).toBe("configured");
     expect(JSON.stringify(publicValue)).not.toContain("secret:evidence");
+  });
+
+  test("bounds local-only capability sidecars and redacts their secret refs", () => {
+    const config = defaultDevZeroConfig();
+    const sidecar = sidecarConfig();
+    config.capabilities.sidecars = [sidecar];
+    expect(nodeConfigSchema.parse(config).capabilities.sidecars).toHaveLength(1);
+    const publicValue = publicConfig(config);
+    expect(publicValue.capabilities.sidecars[0]?.secretRef).toBe("configured");
+    expect(JSON.stringify(publicValue)).not.toContain("secret:speech-sidecar");
+
+    for (const baseUrl of [
+      "https://speech-sidecar:8080",
+      "http://169.254.169.254:8080",
+      "http://example.com:8080",
+      "http://127.0.0.1:80",
+      "http://user:password@127.0.0.1:8080",
+    ]) {
+      expect(
+        nodeCapabilitySidecarConfigSchema.safeParse({
+          ...sidecar,
+          compose: undefined,
+          baseUrl,
+        }).success,
+      ).toBe(false);
+    }
+    expect(
+      nodeConfigSchema.safeParse({
+        ...config,
+        capabilities: { sidecars: [sidecar, sidecar] },
+      }).success,
+    ).toBe(false);
   });
 
   test("requires the lexical backend whenever retrieval is enabled", () => {

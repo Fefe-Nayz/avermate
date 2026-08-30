@@ -539,6 +539,7 @@ function useCapabilityLabels(): Record<NodeCapabilityId, string> {
     storage: t("Files and object storage"),
     conversations: t("Conversation history"),
     retrieval: t("Search, embeddings and reranking"),
+    inference: t("Generic AI and processing capabilities"),
     models: t("Model inference"),
     jobs: t("Background and specialist jobs"),
     sandbox: t("Sandbox execution"),

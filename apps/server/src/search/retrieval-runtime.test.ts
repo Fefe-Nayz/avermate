@@ -139,7 +139,8 @@ describe("configured rerank runtime", () => {
       provider: "qwen3",
       ownerId: "owner-1",
     });
-    expect(provider).toBe(expected);
+    expect(provider).not.toBe(expected);
+    expect(provider?.descriptor()).toEqual(expected.descriptor());
   });
 
   test("revalidates Cohere consent and credential on a stale runtime", async () => {

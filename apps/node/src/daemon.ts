@@ -58,6 +58,26 @@ import {
   ARTIFACT_REAPER_INTERVAL_MS,
   NodeArtifactRetentionReaper,
 } from "./artifact-retention";
+import { NodeCapabilitySecretCustody } from "./capabilities/secret-store";
+import {
+  NodeCapabilityRegistry,
+  type NodeCapabilityAdapter,
+} from "./capabilities/registry";
+import {
+  bridgeLegacyNodeCapabilityOfferings,
+  configuredNodeCapabilitySidecarOffering,
+  inferenceManifestFeature,
+  nodeCapabilityProtocolV1Enabled,
+} from "./capabilities/manifest";
+import {
+  LegacyModelCapabilityAdapter,
+  LegacyRetrievalCapabilityAdapter,
+} from "./capabilities/legacy-bridge";
+import { LegacyArtifactWorkerCapabilityAdapter } from "./capabilities/worker-adapter";
+import { NodeCapabilityExecutor } from "./capabilities/executor";
+import { NodeCapabilityV1Dispatcher } from "./capabilities/dispatcher";
+import { NodeCapabilityHttpSidecarAdapter } from "./capabilities/sidecar-client";
+import { NodeSidecarArtifactIo } from "./capabilities/sidecar-artifacts";
 
 async function readSecretReference(reference: string) {
   if (
@@ -155,6 +175,11 @@ export async function createNodeDaemon(
      */
     specialistProvider?: SandboxProvider;
     jobHandlers?: readonly NodeJobHandler[];
+    /**
+     * Optional node-local capability adapters (for example HTTP sidecars).
+     * They are only registered when NODE_CAPABILITY_PROTOCOL_V1=true.
+     */
+    capabilityAdapters?: readonly NodeCapabilityAdapter[];
   } = {},
 ) {
   const resolvedConfig = await resolveDaemonConfig(input);
@@ -309,6 +334,13 @@ export async function createNodeDaemon(
   const operationGrantReplay = new GrantReplayLedger(
     resolve(dataDir, "relay", "operation-grants.json"),
   );
+  const capabilityV1Results = new NodeOperationResultLedger({
+    path: resolve(dataDir, "relay", "capability-v1-results.json"),
+    maximumBytes: 64 * 1024 * 1024,
+  });
+  const capabilityV1GrantReplay = new GrantReplayLedger(
+    resolve(dataDir, "relay", "capability-v1-grants.json"),
+  );
   const jobGrantReplay = new GrantReplayLedger(
     resolve(dataDir, "relay", "job-grants.json"),
   );
@@ -410,6 +442,115 @@ export async function createNodeDaemon(
     return jobHandlers.advertisedKinds().filter((kind) => !unhealthy.has(kind));
   };
   const initialAdvertisedJobKinds = await advertisedJobKinds();
+  const capabilityProtocolV1 = nodeCapabilityProtocolV1Enabled();
+  const capabilitySecretCustody = new NodeCapabilitySecretCustody(secretStore);
+  const capabilityRegistry = new NodeCapabilityRegistry({
+    nodeId: identity.nodeId,
+    configRevision: () => configRevision(config),
+    secrets: capabilitySecretCustody,
+  });
+  if (capabilityProtocolV1) {
+    const healthyWorkerProfiles = new Map(
+      artifactHandlers.map((handler) => [
+        `${handler.kind}@${handler.capabilityVersion}`,
+        handler.executionProfile(),
+      ]),
+    );
+    const bridges = bridgeLegacyNodeCapabilityOfferings({
+      nodeId: identity.nodeId,
+      configRevision: configRevision(config),
+      config,
+      healthyWorkerProfiles,
+    });
+    for (const bridge of bridges) {
+      switch (bridge.source.kind) {
+        case "model":
+          if (modelGateway) {
+            capabilityRegistry.register(
+              new LegacyModelCapabilityAdapter({
+                offering: bridge.offering,
+                gateway: modelGateway,
+                modelId: bridge.source.modelId,
+              }),
+            );
+          }
+          break;
+        case "embedding":
+          if (providerFetcher && config.retrieval.embeddingEndpoint) {
+            capabilityRegistry.register(
+              new LegacyRetrievalCapabilityAdapter({
+                offering: bridge.offering,
+                fetcher: providerFetcher,
+                endpoint: config.retrieval.embeddingEndpoint,
+              }),
+            );
+          }
+          break;
+        case "rerank":
+          if (providerFetcher && config.retrieval.rerankEndpoint) {
+            capabilityRegistry.register(
+              new LegacyRetrievalCapabilityAdapter({
+                offering: bridge.offering,
+                fetcher: providerFetcher,
+                endpoint: config.retrieval.rerankEndpoint,
+              }),
+            );
+          }
+          break;
+        case "worker": {
+          const workerKind = bridge.source.workerKind;
+          const handler = artifactHandlers.find(
+            (candidate) => candidate.kind === workerKind,
+          );
+          if (handler) {
+            capabilityRegistry.register(
+              new LegacyArtifactWorkerCapabilityAdapter({
+                offering: bridge.offering,
+                handler,
+                nodeId: identity.nodeId,
+              }),
+            );
+          }
+          break;
+        }
+      }
+    }
+    for (const sidecar of config.capabilities.sidecars) {
+      if (!sidecar.enabled) continue;
+      const sidecarOffering = configuredNodeCapabilitySidecarOffering({
+        nodeId: identity.nodeId,
+        configRevision: configRevision(config),
+        sidecar,
+      });
+      const credentialSlot = sidecar.secretRef ? "provider" : undefined;
+      if (sidecar.secretRef) {
+        capabilitySecretCustody.bind({
+          offeringId: sidecarOffering.descriptor.id,
+          slot: credentialSlot!,
+          reference: sidecar.secretRef,
+          version: sidecar.descriptor.connectionRevision,
+        });
+      }
+      capabilityRegistry.register(
+        new NodeCapabilityHttpSidecarAdapter({
+          offering: sidecarOffering,
+          invocationModes: sidecar.invocationModes,
+          baseUrl: sidecar.baseUrl,
+          artifacts: new NodeSidecarArtifactIo(storage),
+          ...(credentialSlot ? { credentialSlot } : {}),
+          healthTimeoutMs: sidecar.health.timeoutMs,
+          healthCredential: (slot) =>
+            capabilitySecretCustody.credential(
+              sidecarOffering.descriptor.id,
+              slot,
+            ),
+        }),
+      );
+    }
+    for (const adapter of input.capabilityAdapters ?? []) {
+      capabilityRegistry.register(adapter);
+    }
+  }
   const port = config.bind.port;
   const hosts = [`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`];
   const security = new ConfiguratorSecurity({
@@ -470,6 +611,21 @@ export async function createNodeDaemon(
           ]
         : []),
     ];
+    if (capabilityProtocolV1) {
+      await Promise.all(
+        capabilityRegistry
+          .listOfferings()
+          .map((offering) =>
+            capabilityRegistry.probe(offering.descriptor.id),
+          ),
+      );
+    }
+    const inference = capabilityProtocolV1
+      ? inferenceManifestFeature({
+          registry: capabilityRegistry,
+          maxConcurrent: Math.max(1, config.jobs.maximumConcurrent * 2),
+        })
+      : null;
     return buildManifest({
       identity,
       config,
@@ -512,6 +668,7 @@ export async function createNodeDaemon(
               },
             }
           : {}),
+        ...(inference ? { inference } : {}),
         ...(config.jobs.enabled && currentJobKinds.length > 0
           ? {
               jobs: {
@@ -581,6 +738,48 @@ export async function createNodeDaemon(
         })
       : null;
   await capabilityDispatcher?.initialize();
+  const capabilityV1Executor =
+    capabilityProtocolV1 &&
+    config.relay.coreGrantPublicKey &&
+    config.relay.coreGrantKeyId &&
+    capabilityRegistry.listOfferings().length > 0
+      ? new NodeCapabilityExecutor({
+          nodeId: identity.nodeId,
+          configRevision: () => configRevision(config),
+          issuerPublicKeyDer: config.relay.coreGrantPublicKey,
+          issuerKeyId: config.relay.coreGrantKeyId,
+          registry: capabilityRegistry,
+          verifyArtifact: async (artifact) => {
+            const metadata = await storage.stat({ ref: artifact.object });
+            if (
+              !metadata ||
+              metadata.digest !== artifact.digest ||
+              metadata.byteSize !== artifact.byteSize ||
+              metadata.mimeType !== artifact.mimeType
+            ) {
+              throw new Error("NODE_CAPABILITY_ARTIFACT_MISMATCH");
+            }
+          },
+        })
+      : null;
+  const capabilityV1Dispatcher = capabilityV1Executor
+    ? new NodeCapabilityV1Dispatcher({
+        nodeId: identity.nodeId,
+        configRevision: () => configRevision(config),
+        issuerPublicKeyDer: config.relay.coreGrantPublicKey!,
+        issuerKeyId: config.relay.coreGrantKeyId!,
+        registry: capabilityRegistry,
+        executor: capabilityV1Executor,
+        grantReplay: capabilityV1GrantReplay,
+        results: capabilityV1Results,
+        maximumConcurrent: Math.max(1, config.jobs.maximumConcurrent * 2),
+        publish: async (frame) => {
+          if (!controlChannel) throw new Error("NODE_CHANNEL_OFFLINE");
+          await controlChannel.send(frame);
+        },
+      })
+    : null;
+  await capabilityV1Dispatcher?.initialize();
   const jobDispatcher =
     config.jobs.enabled &&
     initialAdvertisedJobKinds.length > 0 &&
@@ -624,8 +823,16 @@ export async function createNodeDaemon(
             type: "health",
             frameId: `frame_${crypto.randomUUID()}`,
             nodeId: identity.nodeId,
-            health: Object.keys(health).map((feature) => ({
-              capability:
+            health: Object.keys(health).map((feature) => {
+              const aggregate = capabilityRegistry.health.aggregate();
+              const state =
+                feature !== "inference" || aggregate === "healthy"
+                  ? ("healthy" as const)
+                  : aggregate === "unknown"
+                    ? ("configured" as const)
+                    : aggregate;
+              return {
+                capability:
                 feature === "schoolConnectors"
                   ? "school-connectors"
                   : (feature as
@@ -636,15 +843,21 @@ export async function createNodeDaemon(
                       | "jobs"
                       | "sandbox"
                       | "renderers"
-                      | "mcp"),
-              state: "healthy" as const,
-              lastSuccessAt: new Date().toISOString(),
-              lastErrorAt: null,
-              safeErrorCode: null,
-              queued: 0,
-              active:
-                feature === "jobs" ? (jobDispatcher?.activeCount ?? 0) : 0,
-            })),
+                      | "mcp"
+                      | "inference"),
+                state,
+                lastSuccessAt: new Date().toISOString(),
+                lastErrorAt: null,
+                safeErrorCode: null,
+                queued: 0,
+                active:
+                  feature === "jobs"
+                    ? (jobDispatcher?.activeCount ?? 0)
+                    : feature === "inference"
+                      ? (capabilityV1Dispatcher?.activeCount ?? 0)
+                      : 0,
+              };
+            }),
           });
         },
         onJobOffer: async (frame) => {
@@ -662,13 +875,23 @@ export async function createNodeDaemon(
           await jobDispatcher.acknowledge(frame.jobId, frame.sequence);
         },
         onOperationRequest: async (frame) => {
+          if (frame.operation.startsWith("capability.")) {
+            if (!capabilityV1Dispatcher) {
+              throw new Error("NODE_CAPABILITY_PROTOCOL_V1_NOT_CONFIGURED");
+            }
+            await capabilityV1Dispatcher.accept(frame);
+            return;
+          }
           if (!capabilityDispatcher) {
             throw new Error("NODE_CAPABILITY_DISPATCHER_NOT_CONFIGURED");
           }
           await capabilityDispatcher.accept(frame);
         },
         onOperationCancel: async (frame) => {
-          await capabilityDispatcher?.cancel(frame.operationId);
+          const cancelled = await capabilityV1Dispatcher?.cancel(
+            frame.operationId,
+          );
+          if (!cancelled) await capabilityDispatcher?.cancel(frame.operationId);
         },
       },
     });
@@ -686,6 +909,10 @@ export async function createNodeDaemon(
     providerFetcher,
     providerTransport,
     capabilityDispatcher,
+    capabilityRegistry,
+    capabilitySecretCustody,
+    capabilityV1Executor,
+    capabilityV1Dispatcher,
     jobDispatcher,
     specialistWorkerHealth,
     controlChannel,
@@ -727,6 +954,11 @@ export async function createNodeDaemon(
               models: currentManifest.features.models
                 ? null
                 : "not-configured",
+              inference: currentManifest.features.inference
+                ? null
+                : capabilityProtocolV1
+                  ? "no-generic-offerings"
+                  : "feature-flag-disabled",
               sandbox:
                 currentManifest.features.sandbox
                   ? null
@@ -734,6 +966,7 @@ export async function createNodeDaemon(
                     ? "provider-not-injected"
                     : "disabled",
             },
+            capabilityOfferingHealth: capabilityRegistry.health.list(),
           }),
           { headers: { "content-type": "application/json" } },
         );

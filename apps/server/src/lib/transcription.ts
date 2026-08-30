@@ -14,6 +14,19 @@ import {
   runPairedNodeTranscription,
   selectedNodeDocumentAi,
 } from "../node/document-ai";
+import {
+  MISTRAL_TRANSCRIPTION_MODEL,
+  MISTRAL_TRANSCRIPTION_URL,
+  MistralTranscriptionAdapter,
+  TRANSCRIPTION_PROVIDER_MAX_INPUT_BYTES,
+  TranscriptionProviderError,
+  type TranscriptionProviderFetcher,
+  type TranscriptionSegmentAdapter,
+  type TranscriptionSegmentResult,
+} from "../capabilities/providers/transcription";
+import { capabilityRuntime } from "../capabilities/runtime";
+import { capabilityRegistryInvoker } from "../capabilities/registry-invoker";
+import { coreCapabilityArtifactIo, type CapabilityArtifactIo } from "../capabilities/artifact-io";
 
 /**
  * Mistral audio transcription contract, verified against the current API docs:
@@ -24,32 +37,17 @@ import {
  * requested language. We therefore never send the optional input language;
  * the detected response language remains available to callers.
  */
-export const MISTRAL_TRANSCRIPTION_MODEL = "voxtral-mini-latest";
-export const MISTRAL_TRANSCRIPTION_URL =
-  "https://api.mistral.ai/v1/audio/transcriptions";
-export const MAX_TRANSCRIPTION_AUDIO_BYTES = 32 * 1024 * 1024;
+export { MISTRAL_TRANSCRIPTION_MODEL, MISTRAL_TRANSCRIPTION_URL };
+export const MAX_TRANSCRIPTION_AUDIO_BYTES =
+  TRANSCRIPTION_PROVIDER_MAX_INPUT_BYTES;
 export const TRANSCRIPTION_ATTEMPT_TIMEOUT_MS = 5 * 60 * 1_000;
 
-const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 const MAX_ATTEMPTS = 6;
-const MAX_PROVIDER_TEXT_BYTES = 2 * 1024 * 1024;
-const MAX_PROVIDER_SEGMENTS = 20_000;
-const MAX_PROVIDER_RESPONSE_BYTES = 8 * 1024 * 1024;
-const MAX_PROVIDER_ERROR_BYTES = 64 * 1024;
 
-type Fetcher = (
-  input: string | URL | Request,
-  init?: RequestInit,
-) => Promise<Response>;
-
-export interface TranscriptionResult {
-  text: string;
-  segments: { startMs: number; endMs: number; text: string }[];
-  language?: string;
-}
+export type TranscriptionResult = TranscriptionSegmentResult;
 
 export interface TranscriptionProvider {
-  id: "mistral" | "openai" | "node-local";
+  id: "mistral" | "openai" | "deepgram" | "node-local" | "capability-registry";
   /** Exact provider model, including the attested revision for local Node. */
   model: string;
   transcribeSegment(input: {
@@ -64,7 +62,7 @@ export interface TranscriptionProvider {
 }
 
 export interface MistralTranscriptionOptions {
-  fetch?: Fetcher;
+  fetch?: TranscriptionProviderFetcher;
   sleep?: (milliseconds: number) => Promise<void>;
   /** Test seam. Production resolves the sealed user key, then operator key. */
   key?: string;
@@ -79,18 +77,31 @@ export interface MistralTranscriptionOptions {
   signal?: AbortSignal;
   /** Per-attempt deadline, including response-body consumption. */
   attemptTimeoutMs?: number;
+  /** Provider-attempt seam used by registry/conformance tests. */
+  adapter?: TranscriptionSegmentAdapter;
+  /** Provider-neutral workflow purpose used by the capability policy. */
+  purpose?: string;
+  /** Trusted project/workflow scope supplied by the owning server workflow. */
+  projectId?: string;
+  workflowId?: string;
 }
 
 type TranscriptionResolverDependencies = {
   selectNode: typeof selectedNodeDocumentAi;
   runNode: typeof runPairedNodeTranscription;
   runMistral: typeof runMistralTranscription;
+  runtime: Pick<typeof capabilityRuntime, "invoke">;
+  registry: Pick<typeof capabilityRegistryInvoker, "prepare" | "invoke" | "resolve">;
+  artifacts: CapabilityArtifactIo;
 };
 
 const defaultTranscriptionResolverDependencies: TranscriptionResolverDependencies = {
   selectNode: selectedNodeDocumentAi,
   runNode: runPairedNodeTranscription,
   runMistral: runMistralTranscription,
+  runtime: capabilityRuntime,
+  registry: capabilityRegistryInvoker,
+  artifacts: coreCapabilityArtifactIo,
 };
 
 function transcriptionDisabled() {
@@ -159,100 +170,27 @@ function attemptDeadline(parent: AbortSignal | undefined, timeoutMs: number) {
   };
 }
 
-function redactedProviderMessage(status: number, body: string, secret: string) {
-  let detail = "";
-  try {
-    const parsed = JSON.parse(body) as {
-      detail?: unknown;
-      message?: unknown;
-      error?: { message?: unknown };
-    };
-    const candidate = parsed.detail ?? parsed.message ?? parsed.error?.message;
-    detail = typeof candidate === "string" ? candidate : "";
-  } catch {
-    detail = body;
-  }
-  const safe = detail.replaceAll(secret, "[redacted]").trim().slice(0, 300);
-  return safe
-    ? `Mistral transcription returned ${status}: ${safe}`
-    : `Mistral transcription returned ${status}`;
-}
-
-async function boundedResponseText(
-  response: Response,
-  maxBytes: number,
-  label: string,
-  signal?: AbortSignal,
-) {
-  const declaredLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-    throw new Error(`${label} is larger than the configured limit`);
-  }
-  if (!response.body) return "";
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let total = 0;
-  let text = "";
-  try {
-    while (true) {
-      const chunk = await awaitWithSignal(reader.read(), signal);
-      if (chunk.done) break;
-      total += chunk.value.byteLength;
-      if (total > maxBytes) {
-        await reader.cancel().catch(() => undefined);
-        throw new Error(`${label} is larger than the configured limit`);
-      }
-      text += decoder.decode(chunk.value, { stream: true });
-    }
-    return text + decoder.decode();
-  } catch (error) {
-    if (signal?.aborted) {
-      await reader.cancel(signal.reason).catch(() => undefined);
-    }
-    throw error;
-  } finally {
-    reader.releaseLock();
-  }
-}
-
 async function requestWithRetry(
-  makeRequest: (signal: AbortSignal) => Promise<Response>,
+  makeRequest: (signal: AbortSignal) => Promise<TranscriptionResult>,
   sleep: (milliseconds: number) => Promise<void>,
-  secret: string,
   options: { signal?: AbortSignal; attemptTimeoutMs: number },
 ) {
   let lastError: unknown;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
     if (options.signal?.aborted) throw abortError(options.signal);
     const deadline = attemptDeadline(options.signal, options.attemptTimeoutMs);
-    let response: Response | undefined;
     try {
-      response = await awaitWithSignal(
+      return await awaitWithSignal(
         makeRequest(deadline.signal),
         deadline.signal,
-      );
-      const body = await boundedResponseText(
-        response,
-        response.ok ? MAX_PROVIDER_RESPONSE_BYTES : MAX_PROVIDER_ERROR_BYTES,
-        response.ok
-          ? "Mistral transcription response"
-          : "Mistral transcription error response",
-        deadline.signal,
-      );
-      if (response.ok || !RETRYABLE_STATUSES.has(response.status)) {
-        return { response, body };
-      }
-      lastError = new Error(
-        redactedProviderMessage(response.status, body, secret),
       );
     } catch (error) {
       if (options.signal?.aborted) throw abortError(options.signal);
       if (deadline.timedOut()) {
         lastError = new Error("Mistral transcription attempt timed out");
       } else if (
-        response &&
-        (response.ok || !RETRYABLE_STATUSES.has(response.status))
+        error instanceof TranscriptionProviderError &&
+        !error.retryable
       ) {
         throw error;
       } else {
@@ -272,68 +210,6 @@ async function requestWithRetry(
 
 function credentialForTests(key: string): ResolvedServiceKey {
   return { key, source: "operator" };
-}
-
-function extensionFor(mimeType: string) {
-  if (mimeType === "audio/webm") return ".webm";
-  if (mimeType === "audio/ogg") return ".ogg";
-  if (mimeType === "audio/m4a") return ".m4a";
-  return ".mp4";
-}
-
-function utf8Bytes(value: string) {
-  return new TextEncoder().encode(value).byteLength;
-}
-
-function parseResponse(value: unknown): TranscriptionResult {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("Mistral transcription returned malformed JSON");
-  }
-  const response = value as {
-    text?: unknown;
-    language?: unknown;
-    segments?: unknown;
-  };
-  if (typeof response.text !== "string") {
-    throw new Error("Mistral transcription did not return text");
-  }
-  if (utf8Bytes(response.text) > MAX_PROVIDER_TEXT_BYTES) {
-    throw new Error("Mistral transcription text is larger than 2 MiB");
-  }
-  if (
-    !Array.isArray(response.segments) ||
-    response.segments.length > MAX_PROVIDER_SEGMENTS
-  ) {
-    throw new Error("Mistral transcription returned an invalid segment list");
-  }
-
-  const segments = response.segments.map((entry) => {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-      throw new Error("Mistral transcription returned a malformed segment");
-    }
-    const segment = entry as { start?: unknown; end?: unknown; text?: unknown };
-    if (
-      typeof segment.start !== "number" ||
-      !Number.isFinite(segment.start) ||
-      segment.start < 0 ||
-      typeof segment.end !== "number" ||
-      !Number.isFinite(segment.end) ||
-      segment.end < segment.start ||
-      typeof segment.text !== "string"
-    ) {
-      throw new Error("Mistral transcription returned a malformed segment");
-    }
-    return {
-      startMs: Math.round(segment.start * 1_000),
-      endMs: Math.round(segment.end * 1_000),
-      text: segment.text,
-    };
-  });
-  const language =
-    typeof response.language === "string" && response.language.trim()
-      ? response.language.trim().slice(0, 64)
-      : undefined;
-  return { text: response.text, segments, ...(language ? { language } : {}) };
 }
 
 export async function runMistralTranscription(
@@ -387,7 +263,8 @@ export async function runMistralTranscription(
     estimatorVersion: "transcription-source-duration/1",
   });
 
-  const fetcher = options.fetch ?? fetch;
+  const adapter =
+    options.adapter ?? new MistralTranscriptionAdapter(options.fetch ?? fetch);
   const sleep =
     options.sleep ??
     ((milliseconds: number) =>
@@ -397,51 +274,37 @@ export async function runMistralTranscription(
   let accountingSettled = false;
   try {
     providerStarted = true;
-    const { response, body } = await requestWithRetry(
-      (attemptSignal) => {
-        const form = new FormData();
-        form.append("model", model);
-        form.append("timestamp_granularities", "segment");
-        form.append(
-          "file",
-          new File([input.blob], `segment${extensionFor(input.mimeType)}`, {
-            type: input.mimeType,
-          }),
-        );
-        return fetcher(MISTRAL_TRANSCRIPTION_URL, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${credential.key}` },
-          body: form,
-          signal: attemptSignal,
-        });
+    const result = await requestWithRetry(
+      async (attemptSignal) => {
+        try {
+          return await adapter.transcribeSegment({
+            ...input,
+            model,
+            credential: credential.key,
+            signal: attemptSignal,
+          });
+        } catch (error) {
+          if (
+            error instanceof TranscriptionProviderError &&
+            error.status === 401 &&
+            credential.source === "user"
+          ) {
+            await markServiceKeyInvalid(
+              userId,
+              "transcription",
+              credential.invalidationToken,
+            );
+          }
+          throw error;
+        }
       },
       sleep,
-      credential.key,
       {
         signal,
         attemptTimeoutMs:
           options.attemptTimeoutMs ?? TRANSCRIPTION_ATTEMPT_TIMEOUT_MS,
       },
     );
-    if (response.status === 401 && credential.source === "user") {
-      await markServiceKeyInvalid(
-        userId,
-        "transcription",
-        credential.invalidationToken,
-      );
-    }
-    if (!response.ok) {
-      throw new Error(
-        redactedProviderMessage(response.status, body, credential.key),
-      );
-    }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(body);
-    } catch {
-      throw new Error("Mistral transcription returned malformed JSON");
-    }
-    const result = parseResponse(parsed);
     const observedMilliseconds = result.segments.reduce(
       (maximum, segment) => Math.max(maximum, segment.endMs),
       0,
@@ -480,35 +343,157 @@ export async function resolveTranscriptionProvider(
     ...defaultTranscriptionResolverDependencies,
     ...overrides,
   };
-  const node = await dependencies.selectNode(userId, "transcription");
-  if (node.selected || env.TRANSCRIPTION_PROVIDER === "node") {
-    if (!node.selected) {
-      throw new Error("NODE_TRANSCRIPTION_PLACEMENT_REQUIRED");
+  let legacyProvider: Promise<TranscriptionProvider> | null = null;
+  const loadLegacy = () =>
+    (legacyProvider ??= (async () => {
+      const node = await dependencies.selectNode(userId, "transcription");
+      const selectedNode =
+        node.selected || env.TRANSCRIPTION_PROVIDER === "node";
+      if (selectedNode && !node.selected) {
+        throw new Error("NODE_TRANSCRIPTION_PLACEMENT_REQUIRED");
+      }
+      const model = node.selected
+        ? `${node.modelId}@${node.modelRevision}`
+        : (options.model ?? MISTRAL_TRANSCRIPTION_MODEL);
+      return node.selected
+        ? {
+            id: "node-local" as const,
+            model,
+            transcribeSegment: (input) =>
+              dependencies.runNode(userId, {
+                ...input,
+                operationId: input.operationId ?? options.operationId,
+                attempt: input.attempt,
+                maximumSeconds:
+                  input.maximumSeconds ?? options.maximumSeconds,
+                signal: input.signal ?? options.signal,
+              }),
+          }
+        : {
+            id: "mistral" as const,
+            model,
+            transcribeSegment: (input) =>
+              dependencies.runMistral(userId, input, {
+                ...options,
+                operationId: input.operationId ?? options.operationId,
+                maximumSeconds:
+                  input.maximumSeconds ?? options.maximumSeconds,
+                signal: input.signal ?? options.signal,
+              }),
+          };
+    })());
+  const purpose = options.purpose ?? "recordings.course-transcription";
+  const registryProvider = async (): Promise<TranscriptionProvider> => {
+    const { offering } = await dependencies.registry.prepare({
+      ownerId: userId,
+      capability: "speech.transcribe",
+      purpose,
+      projectId: options.projectId,
+      workflowId: options.workflowId,
+      refreshOfferings: true,
+      signal: options.signal,
+    });
+    if (offering.capability !== "speech.transcribe") {
+      throw new Error("TRANSCRIPTION_CAPABILITY_ROUTE_MISMATCH");
     }
-    return {
-      id: "node-local",
-      model: `${node.modelId}@${node.modelRevision}`,
-      transcribeSegment: (input) =>
-        dependencies.runNode(userId, {
-          ...input,
-          operationId: input.operationId ?? options.operationId,
-          attempt: input.attempt,
-          maximumSeconds: input.maximumSeconds ?? options.maximumSeconds,
-          signal: input.signal ?? options.signal,
-        }),
+    const route = {
+      provider: offering.provider,
+      modelId: offering.modelId,
+      modelRevision: offering.modelRevision,
     };
-  }
-  return {
-    id: "mistral",
-    model: options.model ?? MISTRAL_TRANSCRIPTION_MODEL,
-    transcribeSegment: (input) =>
-      dependencies.runMistral(userId, input, {
-        ...options,
-        operationId: input.operationId ?? options.operationId,
-        maximumSeconds: input.maximumSeconds ?? options.maximumSeconds,
-        signal: input.signal ?? options.signal,
-      }),
+    return {
+      id: "capability-registry",
+      model: `${offering.modelId}@${offering.modelRevision}`,
+      transcribeSegment: async (input) => {
+        const signal =
+          input.signal ?? options.signal ?? new AbortController().signal;
+        const operationId =
+          input.operationId ?? options.operationId ?? crypto.randomUUID();
+        const normalizedMimeType =
+          input.mimeType === "audio/x-wav"
+            ? "audio/wav"
+            : input.mimeType === "audio/m4a"
+              ? "audio/mp4"
+              : input.mimeType;
+        const bytes = new Uint8Array(await input.blob.arrayBuffer());
+        const source = await dependencies.artifacts.write({
+          ownerId: userId,
+          operationId,
+          bytes,
+          mimeType: normalizedMimeType,
+          nameHint: `${operationId}-transcription-source`,
+          purpose: "course-media",
+          signal,
+        });
+        const result = await dependencies.registry.invoke({
+          ownerId: userId,
+          capability: "speech.transcribe",
+          purpose,
+          projectId: options.projectId,
+          workflowId: options.workflowId,
+          request: {
+            schemaVersion: 1,
+            source,
+            mimeType: normalizedMimeType,
+            ...(input.language ? { language: input.language } : {}),
+            timestamps: "segment",
+            diarization: false,
+            maximumSeconds:
+              input.maximumSeconds ?? options.maximumSeconds ?? 14_400,
+          },
+          idempotencyKey: `transcription:${operationId}`,
+          route,
+          requirements: {
+            requiredFeatures: ["timestamps.segment"],
+            inputBytes: bytes.byteLength,
+            batchSize: 1,
+            ...(input.language ? { language: input.language } : {}),
+          },
+          signal,
+        });
+        return {
+          text: result.text,
+          ...(result.language === "unknown"
+            ? {}
+            : { language: result.language }),
+          segments: result.segments.map((segment) => ({
+            startMs: segment.startMs,
+            endMs: segment.endMs,
+            text: segment.text,
+          })),
+        };
+      },
+    };
   };
+  return dependencies.runtime.invoke({
+    ownerId: userId,
+    capability: "speech.transcribe",
+    purpose,
+    legacy: {
+      resolve: async () => {
+        const provider = await loadLegacy();
+        return {
+          offeringId: null,
+          routeKey: `${provider.id}:${provider.model}`,
+          provider: provider.id,
+          modelId: provider.model,
+          reason: "legacy-connection",
+        };
+      },
+      execute: loadLegacy,
+    },
+    registry: {
+      resolve: () =>
+        dependencies.registry.resolve({
+          ownerId: userId,
+          capability: "speech.transcribe",
+          purpose,
+          projectId: options.projectId,
+          workflowId: options.workflowId,
+        }),
+      execute: registryProvider,
+    },
+  });
 }
 
 export type TranscriptionResolverTestDependencies = Partial<TranscriptionResolverDependencies>;

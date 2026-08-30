@@ -54,6 +54,27 @@ export type GeminiEmbeddingProviderOptions = {
   ) => Promise<ResolvedEmbeddingMedia>;
 };
 
+export function geminiEmbeddingSpaceDescriptor(
+  dimensions: 768 | 1536 | 3072,
+  modelRevision = "stable-2026-04",
+): EmbeddingSpaceDescriptor {
+  const identity = {
+    provider: "gemini",
+    model: GEMINI_EMBEDDING_MODEL,
+    modelRevision,
+    dimensions,
+    modalities: ["text", "image", "pdf-page", "audio", "video"] as const,
+    normalization: "provider-unit" as const,
+    preprocessingRevision: "avermate-retrieval-prefixes-and-media-v1",
+    placement: "core" as const,
+  };
+  return {
+    id: `emb_${sha256(canonicalJson(identity))}`,
+    ...identity,
+    modalities: [...identity.modalities],
+  };
+}
+
 type GeminiUsage = {
   promptTokenCount?: unknown;
   totalTokenCount?: unknown;
@@ -233,21 +254,10 @@ export class GeminiEmbeddingProvider implements EmbeddingProvider {
       throw new Error("GEMINI_EMBEDDING_UNAPPROVED_DIMENSIONS");
     }
     this.#deadlineMs = Math.min(options.deadlineMs ?? 30_000, 60_000);
-    const identity = {
-      provider: "gemini",
-      model: GEMINI_EMBEDDING_MODEL,
-      modelRevision: options.modelRevision ?? "stable-2026-04",
-      dimensions: options.dimensions,
-      modalities: ["text", "image", "pdf-page", "audio", "video"] as const,
-      normalization: "provider-unit" as const,
-      preprocessingRevision: "avermate-retrieval-prefixes-and-media-v1",
-      placement: "core" as const,
-    };
-    this.#descriptor = {
-      id: `emb_${sha256(canonicalJson(identity))}`,
-      ...identity,
-      modalities: [...identity.modalities],
-    };
+    this.#descriptor = geminiEmbeddingSpaceDescriptor(
+      options.dimensions,
+      options.modelRevision,
+    );
     this.#fetch =
       options.fetch ??
       ((url, init) =>

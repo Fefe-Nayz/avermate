@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  nodeCapabilityInferenceFeaturesSchema,
+  signedNodeCapabilityInvocationGrantSchema,
+} from "./capability-node";
 import { modelDescriptorSchema } from "./model-gateway";
 import { sandboxProfileIdSchema } from "./sandbox";
 import { objectSha256Schema, ownedObjectRefSchema } from "./storage";
@@ -29,6 +33,7 @@ export const nodeCapabilityIdSchema = z.enum([
   "renderers",
   "school-connectors",
   "mcp",
+  "inference",
 ]);
 export type NodeCapabilityId = z.infer<typeof nodeCapabilityIdSchema>;
 
@@ -179,6 +184,7 @@ export const nodeCapabilityFeaturesSchema = z.looseObject({
       maxResponseBytes: z.number().int().positive().max(4 * 1024 * 1024),
     })
     .optional(),
+  inference: nodeCapabilityInferenceFeaturesSchema.optional(),
 });
 export type NodeCapabilityFeatures = z.infer<
   typeof nodeCapabilityFeaturesSchema
@@ -541,7 +547,10 @@ export const nodeControlFrameSchema = z.discriminatedUnion("type", [
     operation: z.string().min(1).max(128),
     configRevision: digestSchema,
     deadline: timestampSchema,
-    grant: signedNodeCapabilityGrantSchema,
+    grant: z.union([
+      signedNodeCapabilityGrantSchema,
+      signedNodeCapabilityInvocationGrantSchema,
+    ]),
     payload: z.unknown(),
   }),
   z.strictObject({

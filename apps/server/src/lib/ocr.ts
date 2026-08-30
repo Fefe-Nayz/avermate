@@ -10,17 +10,20 @@ import {
   settleManagedProviderUsage,
 } from "../usage/managed-provider-accounting";
 import { runPairedNodeOcr, selectedNodeDocumentAi } from "../node/document-ai";
+import {
+  MISTRAL_OCR_MODEL,
+  MistralOcrAdapter,
+  OcrProviderError,
+  type OcrDocumentAdapter,
+  type OcrProviderFetcher,
+} from "../capabilities/providers/ocr";
+import { capabilityRuntime } from "../capabilities/runtime";
+import { capabilityRegistryInvoker } from "../capabilities/registry-invoker";
+import { coreCapabilityArtifactIo, type CapabilityArtifactIo } from "../capabilities/artifact-io";
 
-export const MISTRAL_OCR_MODEL = "mistral-ocr-latest";
-const MISTRAL_FILES_URL = "https://api.mistral.ai/v1/files";
-const MISTRAL_OCR_URL = "https://api.mistral.ai/v1/ocr";
-const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
-const MAX_ATTEMPTS = 6;
+export { MISTRAL_OCR_MODEL };
 
-type Fetcher = (
-  input: string | URL | Request,
-  init?: RequestInit,
-) => Promise<Response>;
+const OCR_MAX_ATTEMPTS = 6;
 
 export interface MistralOcrResult {
   markdown: string;
@@ -31,7 +34,7 @@ export interface MistralOcrResult {
 }
 
 export interface OcrProvider {
-  id: "mistral" | "node-local";
+  id: "mistral" | "node-local" | "capability-registry";
   model: string;
   run(
     file: { blob: Blob; name: string },
@@ -44,7 +47,7 @@ export interface OcrProvider {
 }
 
 export interface MistralOcrOptions {
-  fetch?: Fetcher;
+  fetch?: OcrProviderFetcher;
   sleep?: (milliseconds: number) => Promise<void>;
   /** Test seam; production always resolves the user's sealed key first. */
   key?: string;
@@ -58,18 +61,31 @@ export interface MistralOcrOptions {
   /** ISO/provider language hint. Node defaults to the pinned fra+eng pack. */
   language?: string;
   attempt?: number;
+  /** Provider-attempt seam used by registry/conformance tests. */
+  adapter?: OcrDocumentAdapter;
+  /** Provider-neutral workflow purpose used by the capability policy. */
+  purpose?: string;
+  /** Trusted project/workflow scope supplied by the owning server workflow. */
+  projectId?: string;
+  workflowId?: string;
 }
 
 type OcrResolverDependencies = {
   selectNode: typeof selectedNodeDocumentAi;
   runNode: typeof runPairedNodeOcr;
   runMistral: typeof runMistralOcr;
+  runtime: Pick<typeof capabilityRuntime, "invoke">;
+  registry: Pick<typeof capabilityRegistryInvoker, "prepare" | "invoke" | "resolve">;
+  artifacts: CapabilityArtifactIo;
 };
 
 const defaultOcrResolverDependencies: OcrResolverDependencies = {
   selectNode: selectedNodeDocumentAi,
   runNode: runPairedNodeOcr,
   runMistral: runMistralOcr,
+  runtime: capabilityRuntime,
+  registry: capabilityRegistryInvoker,
+  artifacts: coreCapabilityArtifactIo,
 };
 
 function ocrDisabled() {
@@ -92,85 +108,11 @@ export async function ocrEnabled(userId?: string) {
   return Boolean(await resolveProviderServiceKey(userId, "mistral", "mistral"));
 }
 
-function redactSecret(value: string, secret: string) {
-  return secret ? value.replaceAll(secret, "[redacted]") : value;
-}
-
-function providerMessage(status: number, body: string, secret: string) {
-  let detail = "";
-  try {
-    const parsed = JSON.parse(body) as {
-      detail?: unknown;
-      message?: unknown;
-      error?: { message?: unknown };
-    };
-    const candidate = parsed.detail ?? parsed.message ?? parsed.error?.message;
-    detail = typeof candidate === "string" ? candidate : "";
-  } catch {
-    detail = body;
-  }
-  const suffix = redactSecret(detail, secret).trim().slice(0, 300);
-  return suffix
-    ? `Mistral OCR returned ${status}: ${suffix}`
-    : `Mistral OCR returned ${status}`;
-}
-
-async function requestWithRetry(
-  makeRequest: () => Promise<Response>,
-  sleep: (milliseconds: number) => Promise<void>,
-  secret: string,
-  signal?: AbortSignal,
-) {
-  let lastError: unknown;
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
-    if (signal?.aborted) {
-      throw signal.reason instanceof Error
-        ? signal.reason
-        : new Error("OCR request was cancelled");
-    }
-    try {
-      const response = await makeRequest();
-      if (response.ok || !RETRYABLE_STATUSES.has(response.status)) {
-        return response;
-      }
-      lastError = new Error(
-        providerMessage(response.status, await response.text(), secret),
-      );
-    } catch (error) {
-      if (signal?.aborted) {
-        throw signal.reason instanceof Error
-          ? signal.reason
-          : new Error("OCR request was cancelled");
-      }
-      lastError = error;
-    }
-
-    if (attempt < MAX_ATTEMPTS - 1) {
-      await sleep(Math.min(20_000, 1_000 * 2 ** attempt));
-    }
-  }
-  throw lastError instanceof Error
-    ? lastError
-    : new Error("Mistral OCR could not be reached");
-}
-
-async function checkedJson(response: Response, secret: string) {
-  const body = await response.text();
-  if (!response.ok) {
-    throw new Error(providerMessage(response.status, body, secret));
-  }
-  try {
-    return JSON.parse(body) as unknown;
-  } catch {
-    throw new Error("Mistral OCR returned malformed JSON");
-  }
-}
-
 function credentialForTests(key: string): ResolvedServiceKey {
   return { key, source: "operator" };
 }
 
-/** Upload one source, then OCR it without re-uploading during request retries. */
+/** Retry whole logical attempts; provider adapters themselves never retry. */
 export async function runMistralOcr(
   userId: string,
   file: { blob: Blob; name: string },
@@ -194,12 +136,10 @@ export async function runMistralOcr(
     );
   }
 
-  const fetcher = options.fetch ?? fetch;
   const sleep =
     options.sleep ??
     ((milliseconds: number) =>
       new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
-  const headers = { Authorization: `Bearer ${credential.key}` };
   const model = options.model ?? MISTRAL_OCR_MODEL;
   const maxPages = options.maxPages ?? env.OCR_MAX_PAGES_PER_DOCUMENT;
   if (!Number.isSafeInteger(maxPages) || maxPages <= 0) {
@@ -220,104 +160,58 @@ export async function runMistralOcr(
   let accountingSettled = false;
   try {
     providerStarted = true;
-    const uploadResponse = await requestWithRetry(
-      () => {
-        const form = new FormData();
-        form.append("purpose", "ocr");
-        form.append(
-          "file",
-          new File([file.blob], file.name, {
-            type: file.blob.type || "application/octet-stream",
-          }),
-        );
-        return fetcher(MISTRAL_FILES_URL, {
-          method: "POST",
-          headers,
-          body: form,
+    const adapter =
+      options.adapter ?? new MistralOcrAdapter(options.fetch ?? fetch);
+    let result: MistralOcrResult | null = null;
+    let lastError: unknown;
+    for (let attempt = 0; attempt < OCR_MAX_ATTEMPTS; attempt += 1) {
+      options.signal?.throwIfAborted();
+      try {
+        result = await adapter.run({
+          file,
+          model,
+          credential: credential.key,
+          sleep,
           signal: options.signal,
         });
-      },
-      sleep,
-      credential.key,
-      options.signal,
-    );
-    if (uploadResponse.status === 401 && credential.source === "user") {
-      await markServiceKeyInvalid(
-        userId,
-        "mistral",
-        credential.invalidationToken,
-      );
-    }
-    const upload = (await checkedJson(uploadResponse, credential.key)) as {
-      id?: unknown;
-    };
-    if (typeof upload.id !== "string" || !upload.id) {
-      throw new Error("Mistral OCR did not return an uploaded file id");
-    }
-
-    const ocrResponse = await requestWithRetry(
-      () =>
-        fetcher(MISTRAL_OCR_URL, {
-          method: "POST",
-          headers: { ...headers, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            document: { file_id: upload.id },
-            model,
-            include_image_base64: false,
-          }),
-          signal: options.signal,
-        }),
-      sleep,
-      credential.key,
-      options.signal,
-    );
-    if (ocrResponse.status === 401 && credential.source === "user") {
-      await markServiceKeyInvalid(
-        userId,
-        "mistral",
-        credential.invalidationToken,
-      );
-    }
-    const ocr = (await checkedJson(ocrResponse, credential.key)) as {
-      pages?: unknown;
-    };
-    if (!Array.isArray(ocr.pages)) {
-      throw new Error("Mistral OCR did not return a pages array");
-    }
-    const pages = ocr.pages.map((page) => {
-      const value = page as { index?: unknown; markdown?: unknown };
-      if (
-        typeof value.index !== "number" ||
-        typeof value.markdown !== "string"
-      ) {
-        throw new Error("Mistral OCR returned a malformed page");
+        break;
+      } catch (error) {
+        if (
+          error instanceof OcrProviderError &&
+          (error.status === 401 || error.status === 403) &&
+          credential.source === "user"
+        ) {
+          await markServiceKeyInvalid(
+            userId,
+            "mistral",
+            credential.invalidationToken,
+          );
+        }
+        lastError = error;
+        if (error instanceof OcrProviderError && !error.retryable) throw error;
       }
-      return { index: value.index, markdown: value.markdown };
-    });
+      if (attempt < OCR_MAX_ATTEMPTS - 1) {
+        await sleep(Math.min(20_000, 1_000 * 2 ** attempt));
+      }
+    }
+    if (!result) {
+      throw lastError instanceof Error
+        ? lastError
+        : new Error("Mistral OCR could not be reached");
+    }
     await settleManagedProviderUsage(reservation, {
-      actualQuantity: String(pages.length),
+      actualQuantity: String(result.pageCount),
       outcome: "completed",
       authoritative: true,
-      evidenceRef: `mistral-file:${upload.id}`,
+      evidenceRef: `mistral-file:${result.providerFileId}`,
     });
     accountingSettled = true;
-    if (pages.length > maxPages) {
+    if (result.pageCount > maxPages) {
       throw new Error(
-        `OCR result has ${pages.length} pages; the configured limit is ${maxPages}`,
+        `OCR result has ${result.pageCount} pages; the configured limit is ${maxPages}`,
       );
     }
-
-    return {
-      markdown: pages
-        .map((page) => `<!-- Page ${page.index} -->\n${page.markdown}`)
-        .join("\n\n"),
-      pageCount: pages.length,
-      providerFileId: upload.id,
-      pages: pages.map((page) => ({
-        providerIndex: page.index,
-        markdown: page.markdown,
-      })),
-    };
+    return result;
   } catch (error) {
     if (reservation && providerStarted && !accountingSettled) {
       await settleManagedProviderUsage(reservation, {
@@ -338,33 +232,170 @@ export async function resolveOcrProvider(
   overrides: Partial<OcrResolverDependencies> = {},
 ): Promise<OcrProvider> {
   const dependencies = { ...defaultOcrResolverDependencies, ...overrides };
-  const node = await dependencies.selectNode(userId, "ocr");
-  if (node.selected || env.OCR_PROVIDER === "node") {
-    if (!node.selected) throw new Error("NODE_OCR_PLACEMENT_REQUIRED");
-    return {
-      id: "node-local",
-      model: `${node.modelId}@${node.modelRevision}`,
-      run: (file, input = {}) =>
-        dependencies.runNode(userId, file, {
-          maxPages: input.maxPages ?? options.maxPages,
-          operationId: input.operationId ?? options.operationId,
-          attempt: input.attempt ?? options.attempt,
-          signal: input.signal ?? options.signal,
-          language: input.language ?? options.language,
-        }),
+  let legacyProvider: Promise<OcrProvider> | null = null;
+  const loadLegacy = () =>
+    (legacyProvider ??= (async () => {
+      const node = await dependencies.selectNode(userId, "ocr");
+      const selectedNode = node.selected || env.OCR_PROVIDER === "node";
+      if (selectedNode && !node.selected) {
+        throw new Error("NODE_OCR_PLACEMENT_REQUIRED");
+      }
+      const model = node.selected
+        ? `${node.modelId}@${node.modelRevision}`
+        : (options.model ?? MISTRAL_OCR_MODEL);
+      return node.selected
+        ? {
+            id: "node-local" as const,
+            model,
+            run: (file, input = {}) =>
+              dependencies.runNode(userId, file, {
+                maxPages: input.maxPages ?? options.maxPages,
+                operationId: input.operationId ?? options.operationId,
+                attempt: input.attempt ?? options.attempt,
+                signal: input.signal ?? options.signal,
+                language: input.language ?? options.language,
+              }),
+          }
+        : {
+            id: "mistral" as const,
+            model,
+            run: (file, input = {}) =>
+              dependencies.runMistral(userId, file, {
+                ...options,
+                maxPages: input.maxPages ?? options.maxPages,
+                operationId: input.operationId ?? options.operationId,
+                signal: input.signal ?? options.signal,
+              }),
+          };
+    })());
+  const purpose = options.purpose ?? "materials.ocr";
+  const registryProvider = async (): Promise<OcrProvider> => {
+    const { offering } = await dependencies.registry.prepare({
+      ownerId: userId,
+      capability: "document.ocr",
+      purpose,
+      projectId: options.projectId,
+      workflowId: options.workflowId,
+      refreshOfferings: true,
+      signal: options.signal,
+    });
+    if (offering.capability !== "document.ocr") {
+      throw new Error("OCR_CAPABILITY_ROUTE_MISMATCH");
+    }
+    const route = {
+      provider: offering.provider,
+      modelId: offering.modelId,
+      modelRevision: offering.modelRevision,
     };
-  }
-  return {
-    id: "mistral",
-    model: options.model ?? MISTRAL_OCR_MODEL,
-    run: (file, input = {}) =>
-      dependencies.runMistral(userId, file, {
-        ...options,
-        maxPages: input.maxPages ?? options.maxPages,
-        operationId: input.operationId ?? options.operationId,
-        signal: input.signal ?? options.signal,
-      }),
+    return {
+      id: "capability-registry",
+      model: `${offering.modelId}@${offering.modelRevision}`,
+      run: async (file, input = {}) => {
+        const signal =
+          input.signal ?? options.signal ?? new AbortController().signal;
+        const operationId =
+          input.operationId ?? options.operationId ?? crypto.randomUUID();
+        const mimeType = file.blob.type.split(";", 1)[0]!.trim().toLowerCase();
+        if (
+          !["application/pdf", "image/png", "image/jpeg", "image/webp"].includes(
+            mimeType,
+          )
+        ) {
+          throw new Error("OCR_CAPABILITY_MIME_UNSUPPORTED");
+        }
+        const bytes = new Uint8Array(await file.blob.arrayBuffer());
+        const source = await dependencies.artifacts.write({
+          ownerId: userId,
+          operationId,
+          bytes,
+          mimeType,
+          nameHint: file.name,
+          purpose: "grade-copy",
+          signal,
+        });
+        const result = await dependencies.registry.invoke({
+          ownerId: userId,
+          capability: "document.ocr",
+          purpose,
+          projectId: options.projectId,
+          workflowId: options.workflowId,
+          request: {
+            schemaVersion: 1,
+            source,
+            mimeType,
+            ...(input.language ?? options.language
+              ? { languageHints: [input.language ?? options.language!] }
+              : {}),
+            requestedFeatures: {
+              markdown: true,
+              blocks: false,
+              tables: true,
+              formulas: true,
+              images: false,
+            },
+            maximumPages:
+              input.maxPages ??
+              options.maxPages ??
+              env.OCR_MAX_PAGES_PER_DOCUMENT,
+          },
+          idempotencyKey: `ocr:${operationId}`,
+          route,
+          requirements: {
+            requiredFeatures: ["native-pdf", "images", "tables", "formulas"],
+            inputBytes: bytes.byteLength,
+            batchSize: 1,
+            ...(input.language ?? options.language
+              ? { language: input.language ?? options.language! }
+              : {}),
+          },
+          signal,
+        });
+        const pages = result.pages.map((page) => ({
+          providerIndex: page.page - 1,
+          markdown: page.markdown ?? page.plainText ?? "",
+        }));
+        const providerFileId = result.providerMetadata?.providerFileId;
+        return {
+          markdown: pages.map((page) => page.markdown).join("\n\n"),
+          pageCount: result.pageCount,
+          providerFileId:
+            typeof providerFileId === "string"
+              ? providerFileId
+              : `capability:${operationId}`,
+          pages,
+        };
+      },
+    };
   };
+  return dependencies.runtime.invoke({
+    ownerId: userId,
+    capability: "document.ocr",
+    purpose,
+    legacy: {
+      resolve: async () => {
+        const provider = await loadLegacy();
+        return {
+          offeringId: null,
+          routeKey: `${provider.id}:${provider.model}`,
+          provider: provider.id,
+          modelId: provider.model,
+          reason: "legacy-connection",
+        };
+      },
+      execute: loadLegacy,
+    },
+    registry: {
+      resolve: () =>
+        dependencies.registry.resolve({
+          ownerId: userId,
+          capability: "document.ocr",
+          purpose,
+          projectId: options.projectId,
+          workflowId: options.workflowId,
+        }),
+      execute: registryProvider,
+    },
+  });
 }
 
 export type OcrResolverTestDependencies = Partial<OcrResolverDependencies>;

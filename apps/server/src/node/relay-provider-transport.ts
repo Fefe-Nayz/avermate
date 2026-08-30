@@ -10,7 +10,13 @@ import type {
   ModelGatewayEvent,
   ModelRequest,
   NodeCapabilityId,
+  NodeCapabilityEventV1,
+  NodeCapabilityJobManifestV1,
+  NodeCapabilityOffering,
   NodeCapabilityOperation,
+  NodeCapabilityRequestV1,
+  NodeCapabilityResultV1,
+  NodeCapabilityTransport,
   NodeDeletionManifest,
   NodeDeletionReceipt,
   NodeConversationTransport,
@@ -50,6 +56,7 @@ import type {
   SandboxWorkspaceSnapshotRef,
   StoredConversationEvent,
   StagedContentChunk,
+  SignedNodeCapabilityInvocationGrant,
   TranscriptionRequest,
   TranscriptionResult,
   UsageEstimate,
@@ -202,6 +209,7 @@ export function createRelayNodeProviderFetcher(input: {
 /** All provider contracts over the authenticated Core→Node relay. */
 export class RelayNodeProviderTransport
   implements
+    NodeCapabilityTransport,
     NodeConversationTransport,
     NodeLexicalSearchTransport,
     NodeModelGatewayTransport,
@@ -223,6 +231,66 @@ export class RelayNodeProviderTransport
 
   async online(nodeId: string) {
     return this.input.relay.online(nodeId);
+  }
+
+  async listCapabilityOfferings(input: {
+    nodeId: string;
+    ownerId: string;
+  }): Promise<NodeCapabilityOffering[]> {
+    const state = this.input.relay.inspect(input.nodeId);
+    if (!state) throw new Error("NODE_CAPABILITY_OFFLINE");
+    if (state.userId !== input.ownerId) {
+      throw new Error("NODE_CAPABILITY_OWNER_MISMATCH");
+    }
+    return state.features.inference?.offerings ?? [];
+  }
+
+  invokeCapability(input: {
+    nodeId: string;
+    ownerId: string;
+    grant: SignedNodeCapabilityInvocationGrant;
+    request: NodeCapabilityRequestV1;
+    signal?: AbortSignal;
+  }): Promise<NodeCapabilityResultV1> {
+    return this.input.relay.requestCapability({
+      nodeId: input.nodeId,
+      userId: input.ownerId,
+      grant: input.grant,
+      request: input.request,
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
+  }
+
+  streamCapability(input: {
+    nodeId: string;
+    ownerId: string;
+    grant: SignedNodeCapabilityInvocationGrant;
+    request: NodeCapabilityRequestV1;
+    signal?: AbortSignal;
+  }): AsyncIterable<NodeCapabilityEventV1> {
+    return this.input.relay.streamCapability({
+      nodeId: input.nodeId,
+      userId: input.ownerId,
+      grant: input.grant,
+      request: input.request,
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
+  }
+
+  artifactJobCapability(input: {
+    nodeId: string;
+    ownerId: string;
+    grant: SignedNodeCapabilityInvocationGrant;
+    manifest: NodeCapabilityJobManifestV1;
+    signal?: AbortSignal;
+  }): Promise<NodeCapabilityResultV1> {
+    return this.input.relay.requestArtifactCapability({
+      nodeId: input.nodeId,
+      userId: input.ownerId,
+      grant: input.grant,
+      request: input.manifest,
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
   }
 
   async executeNodeDeletionManifest(input: {

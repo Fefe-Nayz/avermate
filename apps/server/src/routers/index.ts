@@ -35,8 +35,10 @@ import { managedRouter } from "./managed";
 import { retrievalRouter } from "./retrieval";
 import { learningRouter } from "./learning";
 import { nodeRouter } from "./node";
+import { capabilitiesRouter } from "./capabilities";
 
 export const appRouter = {
+  capabilities: capabilitiesRouter,
   actions: actionsRouter,
   assistant: assistantRouter,
   academicAdjustments: academicAdjustmentsRouter,

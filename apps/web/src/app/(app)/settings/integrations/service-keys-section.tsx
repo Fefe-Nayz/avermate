@@ -3,10 +3,12 @@
 import { useMemo, useState, type FormEvent } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
+  ArrowRightIcon,
   BrainCircuitIcon,
   KeyRoundIcon,
   Mic2Icon,
   RefreshCwIcon,
+  RouteIcon,
   ScanTextIcon,
   SparklesIcon,
   Trash2Icon,
@@ -222,6 +224,24 @@ export function ServiceKeysSection() {
         "Each key is validated once, encrypted on the server and scoped to one capability. Secret values are never returned to the browser."
       )}
     >
+      <Alert>
+        <RouteIcon />
+        <AlertTitle>{t("Provider setup has moved")}</AlertTitle>
+        <AlertDescription>
+          {t(
+            "Use AI & processing to validate connections, discover models and voices, grant consent and choose a separate route for each use case. These fields remain as a legacy compatibility bridge."
+          )}
+        </AlertDescription>
+        <Button
+          size="sm"
+          variant="outline"
+          render={<a href="/settings/processing#connections" />}
+        >
+          {t("Open AI & processing")}
+          <ArrowRightIcon data-icon="inline-end" />
+        </Button>
+      </Alert>
+
       {keys.error ? (
         <Alert variant="destructive">
           <AlertTitle>{t("Provider keys are unavailable")}</AlertTitle>

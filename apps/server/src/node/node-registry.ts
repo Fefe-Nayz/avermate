@@ -135,6 +135,7 @@ function advertisedCapabilities(manifest: NodeCapabilityManifestV2) {
     ["sandbox", "sandbox"],
     ["renderers", "renderers"],
     ["schoolConnectors", "school-connectors"],
+    ["inference", "inference"],
   ];
   for (const [feature, capability] of mapping) {
     if (manifest.features[feature] !== undefined) capabilities.push(capability);

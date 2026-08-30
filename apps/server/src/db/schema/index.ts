@@ -26,3 +26,4 @@ export * from "./managed";
 export * from "./node";
 export * from "./learning";
 export * from "./managed-beta";
+export * from "./capabilities";

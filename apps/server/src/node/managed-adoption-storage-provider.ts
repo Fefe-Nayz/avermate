@@ -33,10 +33,8 @@ import {
   readStorageObject,
   type ManagedStorageProvider,
 } from "../lib/storage-backend";
-import { DOCUMENT_ARTIFACT_FILE_CONSTRAINT } from "../lib/document-artifact-policy";
-
-const PURPOSE = "document-artifact" as const;
-const MAX_BYTES = DOCUMENT_ARTIFACT_FILE_CONSTRAINT.maxBytes;
+import { CAPABILITY_ARTIFACT_FILE_CONSTRAINTS, adoptedArtifactMimeFromKey, capabilityArtifactPurpose } from "../lib/capability-artifact-policy";
+const MAX_BYTES = Math.max(...Object.values(CAPABILITY_ARTIFACT_FILE_CONSTRAINTS).map((policy) => policy.maxBytes));
 
 function sha256(bytes: Uint8Array): `sha256:${string}` {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
@@ -110,11 +108,12 @@ export class ManagedAdoptionStorageProvider implements ObjectStorageProvider {
     } catch {
       return null;
     }
-    if (head.byteSize > MAX_BYTES)
+    const maximumBytes = CAPABILITY_ARTIFACT_FILE_CONSTRAINTS[capabilityArtifactPurpose(ref.namespace)].maxBytes;
+    if (head.byteSize > maximumBytes)
       throw new Error("OBJECT_SIZE_LIMIT_EXCEEDED");
     const bytes = new Uint8Array(
       await readStorageObject(this.managedProvider, ref.key, {
-        maxBytes: MAX_BYTES,
+        maxBytes: maximumBytes,
       }),
     );
     if (bytes.byteLength !== head.byteSize) {
@@ -124,7 +123,7 @@ export class ManagedAdoptionStorageProvider implements ObjectStorageProvider {
     return {
       ref,
       byteSize: bytes.byteLength,
-      mimeType: head.mimeType ?? "application/octet-stream",
+      mimeType: head.mimeType ?? adoptedArtifactMimeFromKey(ref.key) ?? "application/octet-stream",
       digest: sha256(bytes),
       etag: sha256(bytes),
       createdAt: now,
@@ -135,9 +134,10 @@ export class ManagedAdoptionStorageProvider implements ObjectStorageProvider {
   async get(input: ObjectStorageGetInput) {
     const parsed = objectStorageGetInputSchema.parse(input);
     this.assertRef(parsed.ref);
+    const maximumBytes = CAPABILITY_ARTIFACT_FILE_CONSTRAINTS[capabilityArtifactPurpose(parsed.ref.namespace)].maxBytes;
     const bytes = new Uint8Array(
       await readStorageObject(this.managedProvider, parsed.ref.key, {
-        maxBytes: Math.min(parsed.maxBytes ?? MAX_BYTES, MAX_BYTES),
+        maxBytes: Math.min(parsed.maxBytes ?? maximumBytes, maximumBytes),
       }),
     );
     return stream(bytes);
@@ -146,15 +146,14 @@ export class ManagedAdoptionStorageProvider implements ObjectStorageProvider {
   async put(input: ObjectStoragePutInput): Promise<ObjectStorageCommit> {
     const ref = ownedObjectRefSchema.parse(input.ref);
     this.assertRef(ref);
+    const purpose = capabilityArtifactPurpose(ref.namespace);
+    const policy = CAPABILITY_ARTIFACT_FILE_CONSTRAINTS[purpose];
     if (
-      input.byteSize > MAX_BYTES ||
-      !(
-        DOCUMENT_ARTIFACT_FILE_CONSTRAINT.mimeTypes as readonly string[]
-      ).includes(input.mimeType)
+      input.byteSize > policy.maxBytes || !policy.mimeTypes.includes(input.mimeType)
     ) {
       throw new Error("ADOPTION_OBJECT_POLICY_DENIED");
     }
-    const bytes = await readBounded(input.body, MAX_BYTES);
+    const bytes = await readBounded(input.body, policy.maxBytes);
     if (bytes.byteLength !== input.byteSize) {
       throw new Error("OBJECT_STREAM_TRUNCATED");
     }
@@ -174,15 +173,22 @@ export class ManagedAdoptionStorageProvider implements ObjectStorageProvider {
     }
     const copy = new Uint8Array(bytes.byteLength);
     copy.set(bytes);
-    await putStorageObject({
-      provider: this.managedProvider,
-      storageKey: ref.key,
-      purpose: PURPOSE,
-      file: new File([copy.buffer], ref.key.split("/").at(-1) ?? "artifact", {
-        type: input.mimeType,
-      }),
-      mimeType: input.mimeType,
-    });
+    try {
+      await putStorageObject({
+        provider: this.managedProvider,
+        storageKey: ref.key,
+        purpose,
+        file: new File([copy.buffer], ref.key.split("/").at(-1) ?? "artifact", { type: input.mimeType }),
+        mimeType: input.mimeType,
+      });
+    } catch (error) {
+      // Concurrent exact writers can race between stat and local exclusive put.
+      // Only accept that race after reading and validating the winning object.
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      const replay = await this.stat({ ref });
+      if (!replay || replay.byteSize !== input.byteSize || replay.mimeType !== input.mimeType || replay.digest !== input.expectedDigest) throw new Error("OBJECT_ALREADY_EXISTS_DIFFERENT_CONTENT");
+      return { ...replay, replayed: true };
+    }
     const committed = await this.stat({ ref });
     if (
       !committed ||
@@ -244,7 +250,7 @@ export class ManagedAdoptionStorageProvider implements ObjectStorageProvider {
 
   private assertRef(ref: { ownerId: string; namespace: string; key: string }) {
     if (
-      ref.namespace !== PURPOSE ||
+      !Object.hasOwn(CAPABILITY_ARTIFACT_FILE_CONSTRAINTS, ref.namespace) ||
       !/^node-adoptions\/v1\/[a-f0-9]{32}\/[^/]{1,180}$/u.test(ref.key)
     ) {
       throw new Error("ADOPTION_OBJECT_REF_INVALID");

@@ -1,4 +1,8 @@
-import type { RerankProvider } from "@avermate/agent-contracts";
+import type {
+  CapabilityOffering,
+  RerankProvider,
+  RerankSpaceDescriptor,
+} from "@avermate/agent-contracts";
 import { resolveProviderServiceKey } from "../lib/service-keys";
 import {
   createPairedNodeProviderFetcher,
@@ -15,6 +19,8 @@ import {
   TeiRerankProvider,
 } from "./rerank-providers";
 import { loadRetrievalProviderConsent } from "./vector-runtime";
+import { capabilityRuntime } from "../capabilities/runtime";
+import { CapabilityBackedRerankProvider } from "../capabilities/adapters/rerank";
 
 export type CorpusRerankConfiguration = {
   enabled: boolean;
@@ -174,71 +180,170 @@ export async function createOwnedConfiguredRerankProvider(
   } = {},
 ): Promise<RerankProvider | null> {
   const state = corpusRerankConfiguration(environment);
-  if (!state.complete) return null;
-  if (state.provider === "tei") {
-    const fetcher = await (
-      dependencies.createNodeFetcher ?? createPairedNodeProviderFetcher
-    )({
-      ownerId,
-      ...(state.nodeId ? { nodeId: state.nodeId } : {}),
-      purpose: "rerank",
-    });
-    return new TeiRerankProvider({
-      fetch: fetcher,
-      baseUrl: state.baseUrl!,
+  const build = async (): Promise<RerankProvider | null> => {
+    if (!state.complete) return null;
+    if (state.provider === "tei") {
+      const fetcher = await (
+        dependencies.createNodeFetcher ?? createPairedNodeProviderFetcher
+      )({
+        ownerId,
+        ...(state.nodeId ? { nodeId: state.nodeId } : {}),
+        purpose: "rerank",
+      });
+      return new TeiRerankProvider({
+        fetch: fetcher,
+        baseUrl: state.baseUrl!,
+        modelRevision: state.modelRevision!,
+        imageDigest: state.imageDigest!,
+        teiRevision: state.runtimeRevision!,
+      });
+    }
+    if (state.provider === "qwen3") {
+      return (
+        dependencies.createNodeProvider ?? createPairedNodeRerankProvider
+      )({
+        ownerId,
+        ...(state.nodeId ? { nodeId: state.nodeId } : {}),
+        baseUrl: state.baseUrl!,
+        provider: state.provider,
+        model: state.model!,
+        modelRevision: state.modelRevision!,
+        runtimeRevision: state.runtimeRevision!,
+        imageDigest: state.imageDigest!,
+      });
+    }
+    if (state.provider !== "cohere") return null;
+    const resolveServiceKey =
+      dependencies.resolveServiceKey ?? resolveProviderServiceKey;
+    const loadConsent =
+      dependencies.loadConsent ?? loadRetrievalProviderConsent;
+    const [credential, consent] = await Promise.all([
+      resolveServiceKey(ownerId, "inference", "cohere"),
+      loadConsent(
+        ownerId,
+        "cohere",
+        "rerank",
+        COHERE_RERANK_DISCLOSURE_REVISION,
+      ),
+    ]);
+    if (!credential || !consent) return null;
+    if (credential.source !== "user") {
+      throw new Error("COHERE_OPERATOR_KEY_REQUIRES_MANAGED_METERED_ROUTER");
+    }
+    return new CohereRerankProvider({
+      apiKey: credential.key,
+      model: state.model as "rerank-v4.0-pro" | "rerank-v4.0-fast",
       modelRevision: state.modelRevision!,
-      imageDigest: state.imageDigest!,
-      teiRevision: state.runtimeRevision!,
+      authorize: async () => {
+        const [currentCredential, currentConsent] = await Promise.all([
+          resolveServiceKey(ownerId, "inference", "cohere"),
+          loadConsent(
+            ownerId,
+            "cohere",
+            "rerank",
+            COHERE_RERANK_DISCLOSURE_REVISION,
+          ),
+        ]);
+        if (!currentConsent) {
+          throw new Error("COHERE_RERANK_EXPLICIT_CONSENT_REQUIRED");
+        }
+        if (
+          !currentCredential ||
+          currentCredential.source !== "user" ||
+          currentCredential.invalidationToken !== credential.invalidationToken
+        ) {
+          throw new Error("COHERE_RERANK_CREDENTIAL_CHANGED");
+        }
+      },
     });
-  }
-  if (state.provider === "qwen3") {
-    return (dependencies.createNodeProvider ?? createPairedNodeRerankProvider)({
-      ownerId,
-      ...(state.nodeId ? { nodeId: state.nodeId } : {}),
-      baseUrl: state.baseUrl!,
-      provider: state.provider,
-      model: state.model!,
-      modelRevision: state.modelRevision!,
-      runtimeRevision: state.runtimeRevision!,
-      imageDigest: state.imageDigest!,
-    });
-  }
-  if (state.provider !== "cohere") return null;
-  const resolveServiceKey =
-    dependencies.resolveServiceKey ?? resolveProviderServiceKey;
-  const loadConsent = dependencies.loadConsent ?? loadRetrievalProviderConsent;
-  const [credential, consent] = await Promise.all([
-    resolveServiceKey(ownerId, "inference", "cohere"),
-    loadConsent(ownerId, "cohere", "rerank", COHERE_RERANK_DISCLOSURE_REVISION),
-  ]);
-  if (!credential || !consent) return null;
-  if (credential.source !== "user") {
-    throw new Error("COHERE_OPERATOR_KEY_REQUIRES_MANAGED_METERED_ROUTER");
-  }
-  return new CohereRerankProvider({
-    apiKey: credential.key,
-    model: state.model as "rerank-v4.0-pro" | "rerank-v4.0-fast",
-    modelRevision: state.modelRevision!,
-    authorize: async () => {
-      const [currentCredential, currentConsent] = await Promise.all([
-        resolveServiceKey(ownerId, "inference", "cohere"),
-        loadConsent(
+  };
+  const legacyRoute = {
+    offeringId: state.descriptorId,
+    routeKey: `${state.provider}:${state.model}@${state.modelRevision}`,
+    provider: state.provider,
+    modelId: state.model,
+    reason: "legacy-environment-bridge",
+  };
+  type SelectedRerank = {
+    delegate: RerankProvider | null;
+    descriptor: RerankSpaceDescriptor;
+  };
+  const descriptorFromOffering = (
+    offering: Extract<CapabilityOffering, { capability: "rerank.score" }>,
+  ): RerankSpaceDescriptor => ({
+    id: offering.id,
+    provider: offering.provider,
+    model: offering.modelId,
+    modelRevision: offering.modelRevision,
+    languages:
+      offering.specification.languages === "multilingual"
+        ? ["multilingual"]
+        : offering.specification.languages === "unknown"
+          ? ["und"]
+          : [...offering.specification.languages],
+    modalities: ["text"],
+    maximumCandidates: offering.specification.maxCandidates,
+    maximumTokensPerCandidate: offering.specification.maxTokensPerCandidate,
+    scoreSemantics:
+      offering.specification.scoreSemantics === "probability-like"
+        ? "sigmoid-relevance"
+        : "relevance-ordered",
+    placement:
+      offering.placement.kind === "node"
+        ? "node"
+        : offering.placement.kind === "managed"
+          ? "managed"
+          : "core",
+    costUnit: "search-unit",
+  });
+  const selected = await capabilityRuntime.invoke({
+    ownerId,
+    capability: "rerank.score",
+    purpose: "corpus.reranking",
+    legacy: {
+      ...(state.complete ? { resolve: async () => legacyRoute } : {}),
+      execute: async (): Promise<SelectedRerank | null> => {
+        const delegate = await build();
+        return delegate
+          ? { delegate, descriptor: delegate.descriptor() }
+          : null;
+      },
+    },
+    registry: {
+      resolve: async () =>
+        (
+          await import("../capabilities/registry-invoker")
+        ).capabilityRegistryInvoker.resolve({
           ownerId,
-          "cohere",
-          "rerank",
-          COHERE_RERANK_DISCLOSURE_REVISION,
-        ),
-      ]);
-      if (!currentConsent) {
-        throw new Error("COHERE_RERANK_EXPLICIT_CONSENT_REQUIRED");
-      }
-      if (
-        !currentCredential ||
-        currentCredential.source !== "user" ||
-        currentCredential.invalidationToken !== credential.invalidationToken
-      ) {
-        throw new Error("COHERE_RERANK_CREDENTIAL_CHANGED");
-      }
+          capability: "rerank.score",
+          purpose: "corpus.reranking",
+          requirements: { requiredFeatures: ["modality.text"] },
+        }),
+      execute: async (): Promise<SelectedRerank> => {
+        const { offering } = await (
+          await import("../capabilities/registry-invoker")
+        ).capabilityRegistryInvoker.prepare({
+          ownerId,
+          capability: "rerank.score",
+          purpose: "corpus.reranking",
+          requirements: { requiredFeatures: ["modality.text"] },
+          refreshOfferings: true,
+        });
+        if (offering.capability !== "rerank.score") {
+          throw new Error("CAPABILITY_REGISTRY_RERANK_OFFERING_MISMATCH");
+        }
+        return {
+          delegate: null,
+          descriptor: descriptorFromOffering(offering),
+        };
+      },
     },
   });
+  return selected
+    ? new CapabilityBackedRerankProvider(
+        ownerId,
+        selected.delegate,
+        selected.descriptor,
+      )
+    : null;
 }

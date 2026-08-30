@@ -18,10 +18,13 @@
     "admin:set": "bun scripts/set-admin.ts",
     "sandbox:conformance": "bun scripts/sandbox-conformance.ts",
     "sandbox:conformance:mock": "bun scripts/sandbox-conformance.ts --mock",
+    "capability:live": "bun scripts/capability-live.ts",
     "verify:036:evaluation:live": "bun src/search/eval/run-live.ts"
   },
   "dependencies": {
     "@ag-ui/core": "0.0.59",
+    "@ai-sdk/deepgram": "^3.1.3",
+    "@ai-sdk/elevenlabs": "^3.0.33",
     "@ai-sdk/openai-compatible": "3.0.39",
     "@alibaba-group/opensandbox": "0.1.11",
     "@avermate/agent-contracts": "workspace:*",

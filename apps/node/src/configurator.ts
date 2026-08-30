@@ -31,20 +31,25 @@ const configuratorSecretSlots = [
   "sandbox-provider",
   "sandbox-evidence",
 ] as const;
-type ConfiguratorSecretSlot = (typeof configuratorSecretSlots)[number];
+type StaticConfiguratorSecretSlot = (typeof configuratorSecretSlots)[number];
+type ConfiguratorSecretSlot =
+  | StaticConfiguratorSecretSlot
+  | `capability-sidecar:${string}`;
 
 type BrowserConfigInput = Record<string, unknown> & {
   storage?: Record<string, unknown>;
   relay?: Record<string, unknown>;
   retrieval?: Record<string, unknown>;
   models?: Record<string, unknown>;
+  capabilities?: Record<string, unknown>;
   sandbox?: Record<string, unknown>;
 };
 
 function secretSlot(value: unknown): ConfiguratorSecretSlot {
   if (
     typeof value !== "string" ||
-    !configuratorSecretSlots.includes(value as ConfiguratorSecretSlot)
+    !configuratorSecretSlots.includes(value as StaticConfiguratorSecretSlot) &&
+    !/^capability-sidecar:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u.test(value)
   ) {
     throw new Error("CONFIGURATOR_SECRET_SLOT_INVALID");
   }
@@ -52,7 +57,32 @@ function secretSlot(value: unknown): ConfiguratorSecretSlot {
 }
 
 function deploymentPreview(config: NodeConfig) {
-  const composeOverride = `services:\n  node:\n    environment:\n      AVERMATE_NODE_CONFIG: /data/node/avermate-node.yaml\n      AVERMATE_NODE_CONFIG_TEMPLATE: /etc/avermate/avermate-node.template.yaml\n      AVERMATE_NODE_CONTAINER_BRIDGE_PORT: "5189"\n    ports:\n      - "127.0.0.1:5188:5189"\n    volumes:\n      - node-data:/data\n      - ./avermate-node.yaml:/etc/avermate/avermate-node.template.yaml:ro\n`;
+  const enabledSidecars = config.capabilities.sidecars.filter(
+    (sidecar) => sidecar.enabled,
+  );
+  const composeSidecars = enabledSidecars.filter(
+    (sidecar) => sidecar.compose,
+  );
+  const capabilityEnvironment =
+    enabledSidecars.length > 0
+      ? '      NODE_CAPABILITY_PROTOCOL_V1: "true"\n'
+      : "";
+  const dependsOn =
+    composeSidecars.length > 0
+      ? `    depends_on:\n${composeSidecars
+          .map(
+            (sidecar) =>
+              `      ${sidecar.id}:\n        condition: service_started`,
+          )
+          .join("\n")}\n`
+      : "";
+  const sidecarServices = composeSidecars
+    .map(
+      (sidecar) =>
+        `  ${sidecar.id}:\n    image: ${sidecar.compose!.image}\n    restart: unless-stopped\n    expose:\n      - "${sidecar.compose!.containerPort}"`,
+    )
+    .join("\n");
+  const composeOverride = `services:\n  node:\n    environment:\n      AVERMATE_NODE_CONFIG: /data/node/avermate-node.yaml\n      AVERMATE_NODE_CONFIG_TEMPLATE: /etc/avermate/avermate-node.template.yaml\n      AVERMATE_NODE_CONTAINER_BRIDGE_PORT: "5189"\n${capabilityEnvironment}${dependsOn}    ports:\n      - "127.0.0.1:5188:5189"\n    volumes:\n      - node-data:/data\n      - ./avermate-node.yaml:/etc/avermate/avermate-node.template.yaml:ro\n${sidecarServices ? `${sidecarServices}\n` : ""}`;
   const commands = {
     validate: [
       "docker",
@@ -133,6 +163,11 @@ function deploymentPreview(config: NodeConfig) {
         : []),
       ...(config.models.gateway === "litellm"
         ? ["LiteLLM and Avermate budgets both remain authoritative gates."]
+        : []),
+      ...(enabledSidecars.length > 0
+        ? [
+            "Capability sidecars remain private to the Node/Compose network and are never published as endpoints.",
+          ]
         : []),
     ],
   };
@@ -253,12 +288,13 @@ const copy={
  fr:{language:'Langue',localOnly:'Boucle locale uniquement',intro:'Configurez le stockage, les modèles, la recherche, les workers et le cycle de vie. Les valeurs secrètes vont directement dans le coffre local et ne sont jamais renvoyées au navigateur.',unlockTitle:'Déverrouiller le configurateur',bootstrapSecret:"Secret d’amorçage",unlock:'Déverrouiller',navAria:'Étapes de configuration',navConfig:'Configuration',navSecrets:'Secrets',navPairing:'Pairing',navDeploy:'Déploiement et sauvegarde',completeConfig:'Configuration complète',loading:'Chargement',validate:'Valider',apply:'Appliquer',rollback:'Restaurer la dernière configuration',preflight:'Préflight hôte',vaultTitle:'Coffre de secrets local',vaultIntro:'La réponse indique uniquement que le secret est configuré. Elle ne contient ni sa valeur ni sa référence interne.',destination:'Destination',newSecret:'Nouvelle valeur secrète',saveSecret:'Enregistrer dans le coffre',clearSecret:'Retirer de la prochaine configuration',pairingTitle:'Pairing avec le Core',coreUrl:'URL du Core (HTTPS)',pairingId:'ID de tentative confirmé dans Avermate',createCode:'Créer et enregistrer le code',getCredentials:'Récupérer les identifiants',deploymentTitle:'Déploiement, Compose et sauvegarde',deploymentIntro:"Le navigateur ne lance aucune commande privilégiée. Il produit un override déterministe et les tableaux d’arguments exacts pour l’opérateur.",generatePlan:'Générer le plan',downloadCompose:"Télécharger l’override Compose",deploymentOutputAria:'Plan de déploiement',technicalResult:'Résultat technique',technicalOutputAria:"Résultat de l’opération",closeSetup:'Fermer le mode configuration',processing:'Traitement…',localChanges:'Modifications locales',notValidated:'Non validé',loaded:'Chargé',notConfigured:'Non configuré',failure:'Échec',invalidNumber:'Nombre invalide : ',invalidJson:'JSON invalide : ',unlocked:'Configurateur déverrouillé',valid:'Configuration valide',applied:'Configuration appliquée',rolledBack:'Dernière configuration restaurée',preflightDone:'Préflight terminé',secretSaved:'Secret enregistré dans le coffre local',secretCleared:'Secret retiré de la prochaine configuration ; validez puis appliquez pour confirmer',pairingSaved:'Code de pairing enregistré sur le Core',credentialsSaved:'Identifiants scellés dans le coffre ; redémarrage requis',planGenerated:'Plan de déploiement généré',setupClosed:'Mode configuration fermé',sessionRestored:'Session de configuration restaurée'},
  en:{language:'Language',localOnly:'Local loopback only',intro:'Configure storage, models, retrieval, workers, and lifecycle operations. Secret values go directly to the local vault and are never returned to the browser.',unlockTitle:'Unlock the configurator',bootstrapSecret:'Bootstrap secret',unlock:'Unlock',navAria:'Configuration steps',navConfig:'Configuration',navSecrets:'Secrets',navPairing:'Pairing',navDeploy:'Deployment and backup',completeConfig:'Complete configuration',loading:'Loading',validate:'Validate',apply:'Apply',rollback:'Restore previous configuration',preflight:'Host preflight',vaultTitle:'Local secret vault',vaultIntro:'Responses only indicate that a secret is configured. They never contain its value or internal reference.',destination:'Destination',newSecret:'New secret value',saveSecret:'Save in vault',clearSecret:'Remove from next configuration',pairingTitle:'Pair with Core',coreUrl:'Core URL (HTTPS)',pairingId:'Pairing attempt ID confirmed in Avermate',createCode:'Create and register code',getCredentials:'Fetch credentials',deploymentTitle:'Deployment, Compose, and backup',deploymentIntro:'The browser never runs privileged commands. It produces a deterministic override and exact argument arrays for the operator.',generatePlan:'Generate plan',downloadCompose:'Download Compose override',deploymentOutputAria:'Deployment plan',technicalResult:'Technical result',technicalOutputAria:'Operation result',closeSetup:'Close setup mode',processing:'Processing…',localChanges:'Local changes',notValidated:'Not validated',loaded:'Loaded',notConfigured:'Not configured',failure:'Failed',invalidNumber:'Invalid number: ',invalidJson:'Invalid JSON: ',unlocked:'Configurator unlocked',valid:'Configuration valid',applied:'Configuration applied',rolledBack:'Previous configuration restored',preflightDone:'Preflight complete',secretSaved:'Secret stored in the local vault',secretCleared:'Secret removed from the next configuration; validate and apply to confirm',pairingSaved:'Pairing code registered with Core',credentialsSaved:'Credentials sealed in the vault; restart required',planGenerated:'Deployment plan generated',setupClosed:'Setup mode closed',sessionRestored:'Setup session restored'}
 };
-const englishGroups={general:'Profile and paths',storage:'Storage and conversations',retrieval:'Retrieval, embeddings, and reranking',models:'Models and LiteLLM',sandbox:'Sandbox and specialist workers',jobs:'Jobs, lifecycle, and observability'};
+const englishGroups={general:'Profile and paths',storage:'Storage and conversations',retrieval:'Retrieval, embeddings, and reranking',models:'Models and LiteLLM',capabilities:'Private capability sidecars',sandbox:'Sandbox and specialist workers',jobs:'Jobs, lifecycle, and observability'};
 const englishLabels={
  'profile':'Profile','bind.host':'Configurator address','bind.port':'Port','dataDir':'Data directory',
  'storage.driver':'Storage driver','storage.filesystemRoot':'Filesystem root','storage.maxObjectBytes':'Maximum object size (bytes)','storage.quotaBytes':'Total quota (bytes)','conversations.enabled':'Store conversations on Node','conversations.maximumBytes':'Conversation quota (bytes)',
  'retrieval.enabled':'Enable retrieval','retrieval.lexical':'Required lexical index','retrieval.maximumIndexedBytes':'Index quota (bytes)','retrieval.embeddingEndpoint':'Embedding endpoint','retrieval.embeddingProvider':'Embedding provider','retrieval.embeddingModel':'Embedding model','retrieval.embeddingRevision':'Immutable embedding revision','retrieval.embeddingDimensions':'Dimensions (JSON)','retrieval.rerankEndpoint':'Reranker endpoint','retrieval.rerankProvider':'Reranker provider','retrieval.rerankModel':'Reranker model','retrieval.rerankRevision':'Immutable reranker revision','retrieval.rerankImageDigest':'Reranker image digest','retrieval.rerankRuntimeRevision':'Reranker runtime revision',
  'models.enabled':'Enable models','models.gateway':'Gateway','models.endpoint':'Model / LiteLLM endpoint','models.catalogue':'Exact model catalogue (JSON)','models.modelRevisions':'Model revisions (JSON)','models.fallbackChains':'Explicit fallback chains (JSON)','models.virtualKeyTtlSeconds':'Virtual-key TTL (seconds)','models.ownerBudgetMinor':'Per-owner budget (minor units)','models.ownerRequestsPerMinute':'Requests per minute','models.ownerTokensPerMinute':'Tokens per minute','models.currency':'Currency',
+ 'capabilities.sidecars':'Private sidecars (JSON; endpoints and secret references stay on Node)',
  'sandbox.enabled':'Enable sandbox','sandbox.provider':'Sandbox provider','sandbox.endpoint':'Sandbox endpoint','sandbox.hostPolicyDigest':'Host policy digest','sandbox.maxEvidenceAgeSeconds':'Maximum attestation age (seconds)','sandbox.isolation':'Isolation','sandbox.runtimeCheckpoints':'Native runtime checkpoints','sandbox.images':'Attested images (JSON)',
  'workers.opencode.enabled':'Enable OpenCode','workers.opencode.image':'OpenCode image','workers.opencode.digest':'OpenCode digest','workers.opencode.license':'OpenCode license','workers.opencode.maximumInputBytes':'OpenCode maximum input','workers.opencode.maximumOutputBytes':'OpenCode maximum output','workers.opencode.maximumCommands':'OpenCode maximum commands','workers.opencode.commandCatalogue':'OpenCode commands (JSON)','workers.opencode.network':'OpenCode network','workers.opencode.allowedHosts':'OpenCode hosts (one per line)',
  'workers.openhands.enabled':'Enable OpenHands','workers.openhands.image':'OpenHands image','workers.openhands.digest':'OpenHands digest','workers.openhands.license':'OpenHands license','workers.openhands.maximumInputBytes':'OpenHands maximum input','workers.openhands.maximumOutputBytes':'OpenHands maximum output','workers.openhands.maximumCommands':'OpenHands maximum commands','workers.openhands.commandCatalogue':'OpenHands commands (JSON)','workers.openhands.network':'OpenHands network','workers.openhands.allowedHosts':'OpenHands hosts (one per line)',
@@ -286,6 +322,8 @@ const groups=[
   {path:'retrieval.rerankEndpoint',label:'Endpoint reranker',type:'url',optional:true},{path:'retrieval.rerankProvider',label:'Fournisseur reranker',type:'select',optional:true,options:['','tei','qwen3']},{path:'retrieval.rerankModel',label:'Modèle reranker',type:'text',optional:true},{path:'retrieval.rerankRevision',label:'Révision immutable reranker',type:'text',optional:true},{path:'retrieval.rerankImageDigest',label:'Digest image reranker',type:'text',optional:true},{path:'retrieval.rerankRuntimeRevision',label:'Révision runtime reranker',type:'text',optional:true}]},
  {id:'models',label:'Modèles et LiteLLM',fields:[
   {path:'models.enabled',label:'Activer les modèles',type:'boolean'},{path:'models.gateway',label:'Gateway',type:'select',options:['disabled','direct','litellm']},{path:'models.endpoint',label:'Endpoint modèles / LiteLLM',type:'url',optional:true},{path:'models.catalogue',label:'Catalogue exact des modèles (JSON)',type:'json'},{path:'models.modelRevisions',label:'Révisions des modèles (JSON)',type:'json'},{path:'models.fallbackChains',label:'Chaînes de fallback explicites (JSON)',type:'json'},{path:'models.virtualKeyTtlSeconds',label:'TTL clé virtuelle (secondes)',type:'number',min:60,max:86400},{path:'models.ownerBudgetMinor',label:'Budget par propriétaire (unité mineure)',type:'number',min:0},{path:'models.ownerRequestsPerMinute',label:'Requêtes par minute',type:'number',min:1},{path:'models.ownerTokensPerMinute',label:'Tokens par minute',type:'number',min:1},{path:'models.currency',label:'Devise',type:'text'}]},
+ {id:'capabilities',label:'Sidecars de capabilities privés',fields:[
+  {path:'capabilities.sidecars',label:'Sidecars privés (JSON ; endpoints et références secrètes restent sur le Node)',type:'json'}]},
  {id:'sandbox',label:'Sandbox et workers spécialisés',fields:[
   {path:'sandbox.enabled',label:'Activer le sandbox',type:'boolean'},{path:'sandbox.provider',label:'Provider sandbox',type:'select',options:['disabled','opensandbox','microsandbox']},{path:'sandbox.endpoint',label:'Endpoint sandbox',type:'url',optional:true},{path:'sandbox.hostPolicyDigest',label:'Digest politique hôte',type:'text',optional:true},{path:'sandbox.maxEvidenceAgeSeconds',label:'Âge maximal de l’attestation (secondes)',type:'number',min:10},{path:'sandbox.isolation',label:'Isolation',type:'select',options:['none','runc','gvisor','kata','microvm']},{path:'sandbox.runtimeCheckpoints',label:'Runtime checkpoints natifs',type:'boolean'},{path:'sandbox.images',label:'Images attestées (JSON)',type:'json'},
   {path:'sandbox.evidenceEndpoint',label:'Endpoint d’attestation externe',type:'url',optional:true},{path:'sandbox.runtimeRegion',label:'Région du runtime',type:'text',optional:true},{path:'sandbox.runtimeArchitecture',label:'Architecture du runtime',type:'select',optional:true,options:['','amd64','arm64']},{path:'sandbox.runtimeKind',label:'Type de runtime',type:'text',optional:true},{path:'sandbox.runtimeVersion',label:'Version immutable du runtime',type:'text',optional:true},{path:'sandbox.runtimeCheckpointMaxTtlSeconds',label:'TTL maximal checkpoint (secondes)',type:'number',min:60,optional:true},
@@ -297,7 +335,8 @@ const groups=[
 const get=(obj,path)=>path.split('.').reduce((value,key)=>value&&value[key],obj);const del=(obj,path)=>{const keys=path.split('.');const last=keys.pop();const parent=keys.reduce((value,key)=>value&&value[key],obj);if(parent&&last)delete parent[last]};const set=(obj,path,value)=>{const keys=path.split('.');const last=keys.pop();const parent=keys.reduce((value,key)=>(value[key]??={}),obj);parent[last]=value};
 function message(text,isError=false){err.textContent=isError?text:'';status.textContent=isError?'':text}function setBusy(value){busy=value;q('#config-form').setAttribute('aria-busy',String(value));document.querySelectorAll('button').forEach((button)=>button.disabled=value||(button.id==='download-compose'&&!deployment));q('#dirty').textContent=tr(value?'processing':'localChanges')}
 async function call(path,body,bootstrap=false){message('');const headers={'content-type':'application/json','sec-fetch-site':'same-origin'};if(!bootstrap)headers['x-csrf-token']=csrf;const response=await fetch(path,{method:'POST',credentials:'same-origin',headers,body:JSON.stringify(body)});const next=response.headers.get('x-csrf-token');if(next)csrf=next;const data=await response.json();if(!response.ok)throw new Error(data.error||tr('failure'));return data}
-function render(){const root=q('#config-groups');root.replaceChildren();for(const group of groups){const fieldset=document.createElement('fieldset');fieldset.className='config-group';const legend=document.createElement('legend');legend.dataset.groupId=group.id;legend.dataset.frenchLabel=group.label;legend.textContent=locale==='en'?(englishGroups[group.id]??group.label):group.label;fieldset.append(legend);const grid=document.createElement('div');grid.className='grid two';for(const field of group.fields){const wrapper=document.createElement('div');wrapper.className=field.type==='boolean'?'field check':'field';const id='config-'+field.path.replaceAll('.','-');const label=document.createElement('label');label.htmlFor=id;label.dataset.fieldPath=field.path;label.dataset.frenchLabel=field.label;label.textContent=locale==='en'?(englishLabels[field.path]??field.label):field.label;let input;if(field.type==='select'){input=document.createElement('select');for(const option of field.options){const item=document.createElement('option');item.value=option;if(option)item.textContent=option;else{item.dataset.i18n='notConfigured';item.textContent=tr('notConfigured')}input.append(item)}}else if(field.type==='json'||field.type==='lines'){input=document.createElement('textarea');input.spellcheck=false}else{input=document.createElement('input');input.type=field.type==='boolean'?'checkbox':field.type; if(field.min!==undefined)input.min=String(field.min);if(field.max!==undefined)input.max=String(field.max)}input.id=id;input.dataset.path=field.path;input.dataset.type=field.type;input.dataset.optional=field.optional?'true':'false';const value=get(config,field.path);if(field.type==='boolean')input.checked=Boolean(value);else if(field.type==='json')input.value=JSON.stringify(value??(field.path.endsWith('modelRevisions')?{}:[]),null,2);else if(field.type==='lines')input.value=Array.isArray(value)?value.join('\\n'):'';else input.value=value??'';input.addEventListener('input',()=>{q('#dirty').textContent=tr('notValidated')});if(field.type==='boolean'){wrapper.append(input,label)}else{wrapper.append(label,input)}grid.append(wrapper)}fieldset.append(grid);root.append(fieldset)}q('#config-profile').value=config.profile;q('#core-url').value=config.relay?.coreUrl??'';q('#dirty').textContent=tr('loaded')}
+function renderSidecarSecretOptions(){const select=q('#secret-slot');const previous=select.value;for(const option of [...select.querySelectorAll('[data-sidecar-secret]')])option.remove();for(const sidecar of config.capabilities?.sidecars??[]){const option=document.createElement('option');option.value='capability-sidecar:'+sidecar.id;option.textContent='Sidecar: '+sidecar.id;option.dataset.sidecarSecret='true';select.append(option)}if([...select.options].some((option)=>option.value===previous))select.value=previous}
+function render(){const root=q('#config-groups');root.replaceChildren();for(const group of groups){const fieldset=document.createElement('fieldset');fieldset.className='config-group';const legend=document.createElement('legend');legend.dataset.groupId=group.id;legend.dataset.frenchLabel=group.label;legend.textContent=locale==='en'?(englishGroups[group.id]??group.label):group.label;fieldset.append(legend);const grid=document.createElement('div');grid.className='grid two';for(const field of group.fields){const wrapper=document.createElement('div');wrapper.className=field.type==='boolean'?'field check':'field';const id='config-'+field.path.replaceAll('.','-');const label=document.createElement('label');label.htmlFor=id;label.dataset.fieldPath=field.path;label.dataset.frenchLabel=field.label;label.textContent=locale==='en'?(englishLabels[field.path]??field.label):field.label;let input;if(field.type==='select'){input=document.createElement('select');for(const option of field.options){const item=document.createElement('option');item.value=option;if(option)item.textContent=option;else{item.dataset.i18n='notConfigured';item.textContent=tr('notConfigured')}input.append(item)}}else if(field.type==='json'||field.type==='lines'){input=document.createElement('textarea');input.spellcheck=false}else{input=document.createElement('input');input.type=field.type==='boolean'?'checkbox':field.type; if(field.min!==undefined)input.min=String(field.min);if(field.max!==undefined)input.max=String(field.max)}input.id=id;input.dataset.path=field.path;input.dataset.type=field.type;input.dataset.optional=field.optional?'true':'false';const value=get(config,field.path);if(field.type==='boolean')input.checked=Boolean(value);else if(field.type==='json')input.value=JSON.stringify(value??(field.path.endsWith('modelRevisions')?{}:[]),null,2);else if(field.type==='lines')input.value=Array.isArray(value)?value.join('\\n'):'';else input.value=value??'';input.addEventListener('input',()=>{q('#dirty').textContent=tr('notValidated')});if(field.type==='boolean'){wrapper.append(input,label)}else{wrapper.append(label,input)}grid.append(wrapper)}fieldset.append(grid);root.append(fieldset)}renderSidecarSecretOptions();q('#config-profile').value=config.profile;q('#core-url').value=config.relay?.coreUrl??'';q('#dirty').textContent=tr('loaded')}
 const renderBase=render;render=()=>{renderBase();const localCompose=config.relay?.transport==='local-compose';q('#core-url').value=config.relay?.coreUrl??(localCompose?'http://api:5000':'');q('label[for="core-url"]').textContent=locale==='en'?(localCompose?'Local Compose Core URL':'Core URL (HTTPS)'):(localCompose?'URL du Core Compose local':'URL du Core (HTTPS)')};
 function collect(){const next=structuredClone(config);for(const input of document.querySelectorAll('[data-path]')){const path=input.getAttribute('data-path');const type=input.getAttribute('data-type');const optional=input.getAttribute('data-optional')==='true';let value;if(type==='boolean')value=input.checked;else if(type==='number'){if(!input.value&&optional){del(next,path);continue}value=Number(input.value);if(!Number.isFinite(value))throw new Error(tr('invalidNumber')+path)}else if(type==='json'){try{value=JSON.parse(input.value)}catch{throw new Error(tr('invalidJson')+path)}}else if(type==='lines')value=input.value.split(/\\r?\\n/).map((item)=>item.trim()).filter(Boolean);else{value=input.value.trim();if(!value&&optional){del(next,path);continue}}set(next,path,value)}config=next;return next}
 async function action(messageKey,task){if(busy)return;setBusy(true);try{const value=await task();out.textContent=JSON.stringify(value,null,2);message(tr(messageKey));return value}catch(error){message(error.message||String(error),true)}finally{setBusy(false)}}
@@ -308,8 +347,8 @@ q('#apply').onclick=()=>action('applied',async()=>{const data=await call('/api/s
 q('#rollback').onclick=()=>action('rolledBack',async()=>{const data=await call('/api/setup/config/rollback',{});config=data.config;render();return data});
 q('#preflight').onclick=()=>action('preflightDone',()=>call('/api/setup/preflight',{profile:collect().profile}));
 const secretPaths={'storage-s3':'storage.s3SecretRef','model-admin':'models.adminSecretRef','embedding-provider':'retrieval.embeddingSecretRef','rerank-provider':'retrieval.rerankSecretRef','sandbox-provider':'sandbox.providerSecretRef','sandbox-evidence':'sandbox.evidenceSecretRef'};
-q('#save-secret').onclick=()=>action('secretSaved',async()=>{const slot=q('#secret-slot').value;const value=q('#provider-secret').value;const data=await call('/api/setup/secret',{slot,value});q('#provider-secret').value='';if(slot==='model-provider')config.models.providerSecretRefs=Array(data.configuredCount).fill('configured');else set(config,secretPaths[slot],'configured');render();return data});
-q('#clear-secret').onclick=()=>{const slot=q('#secret-slot').value;if(slot==='model-provider')config.models.providerSecretRefs=[];else del(config,secretPaths[slot]);render();message(tr('secretCleared'))};
+q('#save-secret').onclick=()=>action('secretSaved',async()=>{const slot=q('#secret-slot').value;const value=q('#provider-secret').value;const data=await call('/api/setup/secret',{slot,value});q('#provider-secret').value='';if(slot==='model-provider')config.models.providerSecretRefs=Array(data.configuredCount).fill('configured');else if(slot.startsWith('capability-sidecar:')){const sidecar=config.capabilities.sidecars.find((entry)=>entry.id===slot.slice('capability-sidecar:'.length));if(sidecar)sidecar.secretRef='configured'}else set(config,secretPaths[slot],'configured');render();return data});
+q('#clear-secret').onclick=()=>{const slot=q('#secret-slot').value;if(slot==='model-provider')config.models.providerSecretRefs=[];else if(slot.startsWith('capability-sidecar:')){const sidecar=config.capabilities.sidecars.find((entry)=>entry.id===slot.slice('capability-sidecar:'.length));if(sidecar)delete sidecar.secretRef}else del(config,secretPaths[slot]);render();message(tr('secretCleared'))};
 q('#pair').onclick=()=>action('pairingSaved',async()=>{const data=await call('/api/setup/pairing-code',{coreUrl:q('#core-url').value});q('#pairing-id').value=data.offer.pairingAttemptId;return data});
 q('#credentials').onclick=()=>action('credentialsSaved',async()=>{const data=await call('/api/setup/pairing-credentials',{coreUrl:q('#core-url').value,pairingAttemptId:q('#pairing-id').value});const state=await (await fetch('/api/setup/state',{credentials:'same-origin'})).json();config=state.config;render();return data});
 q('#deployment-preview').onclick=()=>action('planGenerated',async()=>{deployment=await call('/api/setup/deployment/preview',collect());q('#deployment-output').textContent=JSON.stringify(deployment,null,2);return deployment});
@@ -502,7 +541,10 @@ export class LocalConfigurator {
         if (typeof body.value !== "string") {
           throw new Error("CONFIGURATOR_SECRET_VALUE_INVALID");
         }
-        const secretName = `setup-${slot}-${crypto
+        const secretSlotName = slot.startsWith("capability-sidecar:")
+          ? `sidecar-${canonicalDigest(slot).slice(7, 19)}`
+          : slot;
+        const secretName = `setup-${secretSlotName}-${crypto
           .randomUUID()
           .replaceAll("-", "")
           .slice(0, 12)}`;
@@ -751,6 +793,7 @@ export class LocalConfigurator {
     candidate.relay ??= {};
     candidate.retrieval ??= {};
     candidate.models ??= {};
+    candidate.capabilities ??= {};
     candidate.sandbox ??= {};
 
     candidate.storage.s3SecretRef = this.#resolveSingleSecret(
@@ -803,6 +846,35 @@ export class LocalConfigurator {
       throw new Error("CONFIGURATOR_SECRET_REFERENCE_INVALID");
     }
 
+    const presentedSidecars = candidate.capabilities.sidecars;
+    if (Array.isArray(presentedSidecars)) {
+      const currentById = new Map(
+        this.#config.capabilities.sidecars.map((sidecar) => [
+          sidecar.id,
+          sidecar,
+        ]),
+      );
+      candidate.capabilities.sidecars = presentedSidecars.map((raw) => {
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+          throw new Error("CONFIGURATOR_SIDECAR_INVALID");
+        }
+        const sidecar = raw as Record<string, unknown>;
+        if (typeof sidecar.id !== "string") {
+          throw new Error("CONFIGURATOR_SIDECAR_INVALID");
+        }
+        const slot = secretSlot(`capability-sidecar:${sidecar.id}`);
+        if (sidecar.secretRef === undefined) return sidecar;
+        if (sidecar.secretRef !== CONFIGURED_SECRET) {
+          throw new Error("CONFIGURATOR_SECRET_REFERENCE_INVALID");
+        }
+        const reference =
+          this.#pendingSecretRefs.get(slot)?.at(-1) ??
+          currentById.get(sidecar.id)?.secretRef;
+        if (!reference) throw new Error("CONFIGURATOR_SECRET_NOT_SET");
+        return { ...sidecar, secretRef: reference };
+      });
+    }
+
     const relay = candidate.relay;
     relay.credentialSecretRef = this.#restoreCurrentSecret(
       relay.credentialSecretRef,
@@ -822,7 +894,7 @@ export class LocalConfigurator {
   }
 
   #resolveSingleSecret(
-    slot: Exclude<ConfiguratorSecretSlot, "model-provider">,
+    slot: Exclude<StaticConfiguratorSecretSlot, "model-provider">,
     presented: unknown,
     current: string | undefined,
   ) {
@@ -860,6 +932,8 @@ export class LocalConfigurator {
         config.models.adminSecretRef,
         ...config.models.providerSecretRefs,
         config.sandbox.providerSecretRef,
+        config.sandbox.evidenceSecretRef,
+        ...config.capabilities.sidecars.map((sidecar) => sidecar.secretRef),
       ].filter((reference): reference is string => Boolean(reference)),
     );
     const unadopted = [...this.#pendingSecretRefs.values()]

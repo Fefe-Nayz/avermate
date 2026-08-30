@@ -1,6 +1,7 @@
 import { db } from "../db";
 import { env } from "../lib/env";
 import { EntitlementService } from "../entitlements/service";
+import { capabilityRegistryExpirySettlementResolver } from "../capabilities/managed-expiry-evidence";
 import { UsageLedger } from "../usage/ledger";
 import { PricingService } from "../usage/pricing";
 import { ManagedBetaControlPlane } from "./beta-control-plane";
@@ -19,7 +20,9 @@ export function managedEntitlements() {
 }
 
 export function managedUsage() {
-  usageInstance ??= new UsageLedger(db.$client, managedEntitlements());
+  usageInstance ??= new UsageLedger(db.$client, managedEntitlements(), {
+    expirySettlement: capabilityRegistryExpirySettlementResolver(db.$client),
+  });
   return usageInstance;
 }
 

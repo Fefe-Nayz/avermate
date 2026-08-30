@@ -25,6 +25,7 @@ import {
   sandboxRuntimeCheckpointCompatibilityV1Schema,
   sandboxRuntimeCheckpointRefV1Schema,
   sandboxWorkspaceSnapshotRefSchema,
+  signedNodeCapabilityGrantSchema,
   type ModelGatewayEvent,
   type NodeCapabilityGrantClaims,
   type NodeCapabilityOperation,
@@ -343,7 +344,7 @@ export class NodeCapabilityOperationDispatcher {
     }
     const claims = verifyGrant({
       frame,
-      grant: frame.grant,
+      grant: signedNodeCapabilityGrantSchema.parse(frame.grant),
       ownerId: payload.ownerId,
       corePublicKeyDer: this.#corePublicKeyDer,
       coreKeyId: this.#coreKeyId,

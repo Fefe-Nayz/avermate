@@ -2,6 +2,16 @@
 
 **Status:** accepted architecture, amended by the plan 035 production audit.
 
+Provider selection and non-language processing are further specified by
+[`ADR 040 — Capability registry`](./adr/040-capability-registry.md). It extends
+`ModelGateway` without replacing the agent runtime: workflows request a typed
+capability and purpose, while the registry freezes the authorized route,
+placement, credential versions and consent revisions for each operation.
+This is an opt-in execution path, not a global default switch: the seven
+migrated families default to `legacy`, can be observed in `shadow`, then enabled
+independently in `registry`. Image/video contracts are not wired to registry
+workflows; native document extraction currently covers the PDF text layer.
+
 **Decision date:** 2026-08-22.
 
 This ADR supersedes the direction in
@@ -137,6 +147,14 @@ authorization boundary and may not silently route arbitrary model-name
 strings. Avermate's owner policy, explicit provider/model descriptors, frozen
 revisions and accounting ceilings remain authoritative even when LiteLLM also
 enforces a narrower virtual-key budget.
+
+ADR 040 also adds explicit registry plugins for LiteLLM and Hugging Face
+Inference Providers. These expose only text-only compatible chat, with an
+explicit model/deployment revision; they do not advertise tools, vision or
+media generation. Hugging Face requires a pinned provider suffix and refuses
+automatic routing. LiteLLM requires an operator-confirmed single upstream
+deployment with retries/fallbacks disabled; request flags reinforce that
+requirement but cannot attest a remote proxy's internal configuration.
 
 ### 8. How the four histories relate
 
@@ -359,27 +377,27 @@ the exact dependency and bundle review.
 
 ## Threat model
 
-| Threat                                              | Control in this architecture                                                                                                              | Residual risk or later owner                                       |
-| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Cross-user replay or run enumeration                | Authenticate first; owner-bound run lookup and checkpoint references; opaque IDs                                                          | Production conversation schema and authorization tests in plan 029 |
-| Event loss, reordering or duplicate tool execution  | Transactional append-before-publish, exact sequence, terminal invariant, cursor replay, idempotency/revision fences                       | Distributed publisher/lease design in later runtime plans          |
-| A node relay becomes a hidden second database       | Core stores only routing/cursor metadata for node placement; offline means explicit unavailability                                        | Plan 032 protocol and persistence tests                            |
+| Threat                                              | Control in this architecture                                                                                                                 | Residual risk or later owner                                       |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Cross-user replay or run enumeration                | Authenticate first; owner-bound run lookup and checkpoint references; opaque IDs                                                             | Production conversation schema and authorization tests in plan 029 |
+| Event loss, reordering or duplicate tool execution  | Transactional append-before-publish, exact sequence, terminal invariant, cursor replay, idempotency/revision fences                          | Distributed publisher/lease design in later runtime plans          |
+| A node relay becomes a hidden second database       | Core stores only routing/cursor metadata for node placement; offline means explicit unavailability                                           | Plan 032 protocol and persistence tests                            |
 | Node corpus placement leaves a readable Core mirror | Core retains only authorization/locator/hash metadata plus authenticated recovery envelopes; FTS is purged and normal reads require the Node | Plan 038 envelope, migration and offline tests                     |
-| False end-to-end privacy claim                      | v1 documents Core's transient plaintext visibility                                                                                        | A future versioned encrypted relay, if built                       |
-| Prompt injection elevates privileges                | Typed trust labels; immutable policy snapshot; deterministic broker repeats authorization                                                 | Tool registry/policy implementation in plan 027                    |
-| Tool approval races or replay                       | Approval must bind owner, tool, normalized arguments, revision and expiry before execution                                                | Durable approval/action ledger in plan 030                         |
-| SSRF, DNS rebinding or credential exfiltration      | Curated origins, complete DNS validation, pinned lookup, same-origin redirects, origin-bound secret, network/address blocks and deadlines | Proxy-specific integration tests whenever a new transport is added |
-| Provider response leaks secrets into history        | Payload redaction before persistence and adapter serialization; raw response never exposed                                                | Typed per-event payload schemas should expand before production    |
-| Raw reasoning or private source content is rendered | Reject raw reasoning events/fields; only authorized summaries and opaque continuation refs                                                | Provider-specific adapter audits                                   |
-| Checkpoint deserialization crosses a trust boundary | Checkpoints are server-created, owner-bound and graph-versioned; no client import                                                         | Encryption-at-rest and retention policy in production storage plan |
-| External telemetry copies prompts/files             | No tracing configured by default; explicit opt-in and redaction required                                                                  | Deployment policy and network egress tests                         |
-| Stream/resource exhaustion                          | Per-user/per-run caps, replay limit, heartbeat, response byte and time limits                                                             | Distributed quota/rate enforcement before production               |
-| Arbitrary code escapes the academic service         | No generic shell tool in Core; execution belongs behind a bounded sandbox                                                                 | Plan 031                                                           |
-| UI package becomes canonical state                  | External store is projection-only and branch changes return to Avermate                                                                   | Production branch/CAS tests in plan 029                            |
+| False end-to-end privacy claim                      | v1 documents Core's transient plaintext visibility                                                                                           | A future versioned encrypted relay, if built                       |
+| Prompt injection elevates privileges                | Typed trust labels; immutable policy snapshot; deterministic broker repeats authorization                                                    | Tool registry/policy implementation in plan 027                    |
+| Tool approval races or replay                       | Approval must bind owner, tool, normalized arguments, revision and expiry before execution                                                   | Durable approval/action ledger in plan 030                         |
+| SSRF, DNS rebinding or credential exfiltration      | Curated origins, complete DNS validation, pinned lookup, same-origin redirects, origin-bound secret, network/address blocks and deadlines    | Proxy-specific integration tests whenever a new transport is added |
+| Provider response leaks secrets into history        | Payload redaction before persistence and adapter serialization; raw response never exposed                                                   | Typed per-event payload schemas should expand before production    |
+| Raw reasoning or private source content is rendered | Reject raw reasoning events/fields; only authorized summaries and opaque continuation refs                                                   | Provider-specific adapter audits                                   |
+| Checkpoint deserialization crosses a trust boundary | Checkpoints are server-created, owner-bound and graph-versioned; no client import                                                            | Encryption-at-rest and retention policy in production storage plan |
+| External telemetry copies prompts/files             | No tracing configured by default; explicit opt-in and redaction required                                                                     | Deployment policy and network egress tests                         |
+| Stream/resource exhaustion                          | Per-user/per-run caps, replay limit, heartbeat, response byte and time limits                                                                | Distributed quota/rate enforcement before production               |
+| Arbitrary code escapes the academic service         | No generic shell tool in Core; execution belongs behind a bounded sandbox                                                                    | Plan 031                                                           |
+| UI package becomes canonical state                  | External store is projection-only and branch changes return to Avermate                                                                      | Production branch/CAS tests in plan 029                            |
 
 ## Current implementation status
 
-Plan 026 remains the replaceability proof, but plans 027–039 now provide the
+Plan 026 remains the replaceability proof, but plans 027–040 now provide the
 production repository paths:
 
 - `packages/agent-contracts` owns the versioned event, context, placement,
@@ -398,6 +416,39 @@ production repository paths:
 - the sandbox, Gemini multimodal embedding, hybrid RRF/reranking, bounded
   OpenCode/OpenHands and managed-beta paths remain explicitly activated and
   fail closed when their provider/image evidence is absent.
+
+The capability registry adds compiled Mistral media/language/embedding,
+ElevenLabs TTS and Deepgram STT adapters, Gemini embedding, Cohere reranking,
+OpenAI/OpenRouter/compatible language, narrow LiteLLM/Hugging Face chat, native
+PDF extraction and signed Node offerings. Per-family flags are listed in the
+[operator guide](./capability-registry/operator-guide.md). Legacy service-key
+projections are read-only, not automatic registry provisioning.
+
+Connection authority changes retire superseded offerings atomically; routine
+successful revalidation of a ready connection preserves its pinned routes.
+Planning filters stale revisions and expired offerings. Health has a five-minute
+TTL with on-demand probes, while shadow diagnostics are bounded process-local
+telemetry. Operations, attempts and normalized usage are durable; identical
+replays do not double-settle usage, and cancellation cannot be revived by a late
+failure. Managed routes require pre-dispatch quota reservations and fail closed
+without a broker or supported bound; unknown upstream costs are not labelled
+free. Node media inputs are transferred and output artifacts are verified and
+adopted through the signed, bounded transport. `CapabilityArtifactIo.write`
+and `CapabilityArtifactIo.adopt` both preserve the selected Node/local/S3
+placement with durable two-phase adoption.
+Canonical Core file metadata does not imply that every file's bytes live there.
+
+In registry language mode, the assistant model selector projects the owner's
+configured, authorized offerings. A `capability:<offeringId>` selection pins the
+exact offering and connection; legacy/shadow keep their existing catalogue.
+This read-only projection does not itself probe provider health.
+
+Legacy removal and operator-key bootstrap conversion are phase-14 work scheduled
+after a compatibility release. Exhaustive upstream catalogues, all document
+formats and image/video workflows remain separate work. Public policy writes are
+user-scoped; ordinary accounts cannot create operator placements. Operation
+inspection does not expose a generic retry endpoint: relaunch from the original
+workflow so its input and authority snapshots can be reconstructed.
 
 Repository implementation is not live release evidence. Real provider,
 healthy-host, air-gap, restore/load and managed-isolation attestations remain

@@ -9,8 +9,13 @@ import {
   type StagedContentChunk,
   type StagedContentVersion,
 } from "@avermate/agent-contracts";
-import { extractText, getDocumentProxy } from "unpdf";
 import { z } from "zod";
+import {
+  nativePdfDocumentExtractionAdapter,
+  type NativePdfExtraction,
+} from "../capabilities/providers/document-extraction";
+import { capabilityRuntime } from "../capabilities/runtime";
+import { capabilityRegistryInvoker } from "../capabilities/registry-invoker";
 import { db } from "../db";
 import { readOwnedFileBytes } from "../lib/owned-file-storage";
 import { splitMarkdownSlides } from "../lib/study-document-content";
@@ -58,59 +63,15 @@ export type SourceExtractionSelector = {
   conversationHeadMessageId: string;
 };
 
-export type NativePdfExtraction = {
-  totalPages: number;
-  pages: readonly { page: number; text: string }[];
-};
-
+export type { NativePdfExtraction };
 const MAX_PDF_BYTES = 64 * 1024 * 1024;
-const MAX_PDF_PAGES = 10_000;
-const MAX_PDF_TEXT_BYTES = 64 * 1024 * 1024;
 
 /** Bounded, deterministic text-layer extraction. Empty pages stay explicit. */
 export async function extractNativePdfText(
   bytes: ArrayBuffer | Uint8Array,
-  options: { timeoutMs?: number } = {},
+  options: { timeoutMs?: number; signal?: AbortSignal } = {},
 ): Promise<NativePdfExtraction> {
-  const input = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  if (input.byteLength > MAX_PDF_BYTES) {
-    throw new Error("PDF exceeds the native extraction byte limit");
-  }
-  const pdf = await getDocumentProxy(input, {
-    maxImageSize: 16_777_216,
-    stopAtErrors: false,
-  });
-  if (pdf.numPages < 1 || pdf.numPages > MAX_PDF_PAGES) {
-    await pdf.cleanup();
-    throw new Error("PDF page count exceeds the native extraction limit");
-  }
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const result = await Promise.race([
-      extractText(pdf, { mergePages: false }),
-      new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(
-          () => reject(new Error("PDF native text extraction timed out")),
-          options.timeoutMs ?? 45_000,
-        );
-      }),
-    ]);
-    const pages = result.text.map((text, index) => ({
-      page: index + 1,
-      text: text.replaceAll("\0", "").replace(/\r\n?/g, "\n").trim(),
-    }));
-    const byteSize = pages.reduce(
-      (total, page) => total + utf8Size(page.text),
-      0,
-    );
-    if (byteSize > MAX_PDF_TEXT_BYTES) {
-      throw new Error("PDF text layer exceeds the extraction output limit");
-    }
-    return { totalPages: result.totalPages, pages };
-  } finally {
-    clearTimeout(timer);
-    await pdf.cleanup().catch(() => undefined);
-  }
+  return nativePdfDocumentExtractionAdapter.extract(bytes, options);
 }
 
 export interface IndexableSourceAdapter {
@@ -354,9 +315,94 @@ export class MaterialSourceAdapter implements IndexableSourceAdapter {
         const bytes = await (
           this.dependencies.readObject ?? readOwnedFileBytes
         )(input.ownerId, ownedPdfFile, { maxBytes: MAX_PDF_BYTES });
-        nativePdf = await (
-          this.dependencies.extractPdf ?? extractNativePdfText
-        )(bytes);
+        const legacyExtractor =
+          this.dependencies.extractPdf ?? extractNativePdfText;
+        const inputBytes =
+          bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+        const source = {
+          object: {
+            ownerId: input.ownerId,
+            namespace: "files" as const,
+            key: ownedPdfFile.id,
+          },
+          digest: `sha256:${sha256(inputBytes)}` as const,
+          byteSize: inputBytes.byteLength,
+          mimeType: "application/pdf",
+        };
+        nativePdf = await capabilityRuntime.invoke({
+          ownerId: input.ownerId,
+          capability: "document.extract",
+          purpose: "materials.document-extraction",
+          legacy: {
+            resolve: async () => ({
+              offeringId: null,
+              routeKey: "avermate-native-pdf:unpdf-text-layer/1",
+              provider: "avermate-native-pdf",
+              modelId: "unpdf-text-layer",
+              reason: "legacy-native-extractor",
+            }),
+            execute: () => legacyExtractor(bytes),
+          },
+          registry: {
+            resolve: () =>
+              capabilityRegistryInvoker.resolve({
+                ownerId: input.ownerId,
+                capability: "document.extract",
+                purpose: "materials.document-extraction",
+                route: {
+                  provider: "avermate-native-pdf",
+                  modelId: "unpdf-text-layer",
+                  modelRevision: "unpdf-text-layer/1",
+                },
+                requirements: {
+                  requiredFeatures: ["deterministic", "source-locators"],
+                  inputBytes: source.byteSize,
+                  batchSize: 1,
+                },
+              }),
+            execute: async () => {
+              const result = await capabilityRegistryInvoker.invoke({
+                ownerId: input.ownerId,
+                capability: "document.extract",
+                purpose: "materials.document-extraction",
+                request: {
+                  schemaVersion: 1,
+                  source,
+                  mimeType: source.mimeType,
+                  maximumBytes: MAX_PDF_BYTES,
+                },
+                idempotencyKey: `document-extract:${sha256(inputBytes)}`,
+                route: {
+                  provider: "avermate-native-pdf",
+                  modelId: "unpdf-text-layer",
+                  modelRevision: "unpdf-text-layer/1",
+                },
+                requirements: {
+                  requiredFeatures: ["deterministic", "source-locators"],
+                  inputBytes: source.byteSize,
+                  batchSize: 1,
+                },
+              });
+              const pages = result.document.sections.map((section) => {
+                if (section.sourceLocator.kind !== "page") {
+                  throw new Error("DOCUMENT_EXTRACTION_PAGE_LOCATOR_REQUIRED");
+                }
+                const page = Number(section.sourceLocator.value);
+                if (!Number.isSafeInteger(page) || page < 1) {
+                  throw new Error("DOCUMENT_EXTRACTION_PAGE_LOCATOR_INVALID");
+                }
+                return { page, text: section.markdown };
+              });
+              return {
+                totalPages: pages.reduce(
+                  (maximum, page) => Math.max(maximum, page.page),
+                  0,
+                ),
+                pages,
+              };
+            },
+          },
+        });
         for (const page of nativePdf.pages) {
           if (!page.text) continue;
           blocks.push({

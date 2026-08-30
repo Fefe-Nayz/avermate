@@ -1,5 +1,6 @@
 import {
   nodeCapabilityGrantClaimsSchema,
+  signedNodeCapabilityInvocationGrantSchema,
   nodeCapabilityManifestV2Schema,
   nodeCredentialDeliveryProofSchema,
   nodeJobV1Schema,
@@ -16,7 +17,9 @@ import {
   type NodePairingOffer,
   type NodePairingRegistration,
   type SignedNodeCapabilityGrant,
+  type SignedNodeCapabilityInvocationGrant,
   type UnsignedNodeCapabilityManifestV2,
+  type UnsignedNodeCapabilityInvocationGrantClaims,
   type UnsignedNodeJobV1,
 } from "@avermate/agent-contracts";
 import { randomBytes } from "node:crypto";
@@ -272,6 +275,17 @@ export function signCapabilityGrant(
   };
 }
 
+export function signNodeCapabilityInvocationGrant(
+  issuerIdentity: NodeIdentity,
+  claims: UnsignedNodeCapabilityInvocationGrantClaims,
+): SignedNodeCapabilityInvocationGrant {
+  return signedNodeCapabilityInvocationGrantSchema.parse({
+    claims,
+    keyId: issuerIdentity.keyId,
+    signature: signCanonical(issuerIdentity, claims),
+  });
+}
+
 export function unsignedNodeJob(job: NodeJobV1): UnsignedNodeJobV1 {
   return unsignedNodeJobV1Schema.parse({
     id: job.id,
@@ -355,6 +369,10 @@ type ReplayJournal = Record<
   { fingerprint: string; expiresAt: string; firstAcceptedAt: string }
 >;
 
+type ReplayableGrantClaims =
+  | NodeCapabilityGrantClaims
+  | UnsignedNodeCapabilityInvocationGrantClaims;
+
 export class GrantReplayLedger {
   readonly #path: string;
   #journal: ReplayJournal | null = null;
@@ -387,7 +405,7 @@ export class GrantReplayLedger {
   }
 
   async accept(
-    claims: NodeCapabilityGrantClaims,
+    claims: ReplayableGrantClaims,
     envelopeDigest: string,
     now = Date.now(),
   ) {
@@ -395,12 +413,20 @@ export class GrantReplayLedger {
     for (const [jti, record] of Object.entries(journal)) {
       if (Date.parse(record.expiresAt) <= now) delete journal[jti];
     }
-    const principal = canonicalDigest({
-      nodeId: claims.nodeId,
-      userId: claims.userId,
-      actorKind: claims.actorKind,
-      actorClientId: claims.actorClientId ?? null,
-    });
+    const principal = canonicalDigest(
+      "ownerId" in claims
+        ? {
+            nodeId: claims.nodeId,
+            ownerId: claims.ownerId,
+            offeringId: claims.offeringId,
+          }
+        : {
+            nodeId: claims.nodeId,
+            userId: claims.userId,
+            actorKind: claims.actorKind,
+            actorClientId: claims.actorClientId ?? null,
+          },
+    );
     const fingerprint = canonicalDigest({ principal, envelopeDigest });
     const previous = journal[claims.jti];
     if (previous) {

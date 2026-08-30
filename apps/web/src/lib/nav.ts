@@ -6,6 +6,7 @@ import {
   ChartNoAxesCombinedIcon,
   CloudCogIcon,
   CompassIcon,
+  CpuIcon,
   FunctionSquareIcon,
   FolderOpenIcon,
   FolderKanbanIcon,
@@ -785,6 +786,58 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
         label: "Learning analysis privacy",
         searchTerms: [
           "copie ocr maîtrise evidence preuve analyse consentement confidentialité latency quiz progression",
+        ],
+      },
+    ],
+  },
+  {
+    href: "/settings/processing",
+    label: "AI & processing",
+    icon: CpuIcon,
+    searchTerms: [
+      "ai ia provider fournisseur connection connexion capability capacité routing routage fallback privacy confidentialité usage coût byok litellm hugging face deepgram elevenlabs mistral gemini cohere openai node self host",
+    ],
+    items: [
+      {
+        href: "/settings/processing#connections",
+        label: "Provider connections",
+        searchTerms: [
+          "api key clé endpoint provider byok node managed litellm hugging face openai compatible",
+        ],
+      },
+      {
+        href: "/settings/processing#capabilities",
+        label: "Available capabilities",
+        searchTerms: [
+          "chat embedding reranking transcription dictation tts ocr extraction image video models voices",
+        ],
+      },
+      {
+        href: "/settings/processing#policies",
+        label: "Capability policies",
+        searchTerms: [
+          "primary fallback order automatic pinned placement purpose workflow route",
+        ],
+      },
+      {
+        href: "/settings/processing#usage",
+        label: "AI usage and cost",
+        searchTerms: [
+          "tokens pages seconds characters vectors candidates quota budget coût consommation",
+        ],
+      },
+      {
+        href: "/settings/processing#privacy",
+        label: "Processing privacy",
+        searchTerms: [
+          "consent egress data cloud local node managed external provider confidentialité données",
+        ],
+      },
+      {
+        href: "/settings/processing#diagnostics",
+        label: "Capability diagnostics",
+        searchTerms: [
+          "operations attempts route health errors shadow mismatches debug diagnostic",
         ],
       },
     ],

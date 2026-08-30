@@ -44,6 +44,8 @@ import { PairedNodeRuntimeCheckpointLifecycle } from "./runtime-checkpoint-lifec
 import { CoreRemoteDeletionRepository } from "./sql-remote-deletion-repository";
 import { RemoteDeletionCoordinator } from "./remote-deletion";
 import { nodePlacementMigrationReady } from "./readiness";
+import { CAPABILITY_ARTIFACT_EXTENSION_BY_MIME, CAPABILITY_ARTIFACT_FILE_CONSTRAINTS, type CapabilityArtifactPurpose } from "../lib/capability-artifact-policy";
+import { capabilityNodeAdoptionStorage } from "./capability-adoption-storage";
 
 export const MAX_NODE_ARTIFACT_ADOPTION_BYTES = 32 * 1024 * 1024;
 
@@ -56,18 +58,7 @@ export function registerNodeConversationReconciler(
   nodeConversationReconciler = reconcile;
 }
 
-const adoptionExtensionByMime: Readonly<Record<string, string>> = {
-  "application/pdf": ".pdf",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation":
-    ".pptx",
-  "audio/mpeg": ".mp3",
-  "audio/mp4": ".m4a",
-  "audio/ogg": ".ogg",
-  "image/png": ".png",
-  "image/webp": ".webp",
-  "text/tab-separated-values": ".tsv",
-  "text/html": ".html",
-};
+const adoptionExtensionByMime = CAPABILITY_ARTIFACT_EXTENSION_BY_MIME;
 
 function stableHash(value: string) {
   return createHash("sha256").update(value).digest("hex");
@@ -142,6 +133,7 @@ function adoptionIntent(input: {
   idempotencyKey: string;
   artifact: NodeArtifactRef;
   providerId: string;
+  purpose?: CapabilityArtifactPurpose;
 }): ObjectAdoptionIntent {
   const extension = adoptionExtensionByMime[input.artifact.mimeType];
   if (!extension) throw new Error("NODE_ARTIFACT_ADOPTION_MIME_DENIED");
@@ -150,7 +142,7 @@ function adoptionIntent(input: {
     providerId: input.providerId,
     ref: {
       ownerId: input.ownerId,
-      namespace: "document-artifact",
+      namespace: input.purpose ?? "document-artifact",
       key: `node-adoptions/v1/${stableHash(input.ownerId).slice(0, 32)}/${stableHash(
         `${input.adoptionId}\0${input.artifact.digest}`,
       ).slice(0, 48)}${extension}`,
@@ -243,6 +235,35 @@ export async function adoptPairedNodeArtifact(input: {
     replayed: uploaded.replayed,
     record: uploaded.record,
   };
+}
+
+/** Two-phase capability input write without changing the owner's storage placement. */
+export async function storeCapabilityArtifact(input: {
+  ownerId: string;
+  adoptionId: string;
+  idempotencyKey: string;
+  artifact: NodeArtifactRef;
+  purpose: CapabilityArtifactPurpose;
+  bytes: Uint8Array;
+}) {
+  if (input.artifact.object.ownerId !== input.ownerId || input.artifact.byteSize !== input.bytes.byteLength || `sha256:${createHash("sha256").update(input.bytes).digest("hex")}` !== input.artifact.digest) {
+    throw new Error("CAPABILITY_ARTIFACT_WRITE_AUTHORITY_MISMATCH");
+  }
+  const policy = CAPABILITY_ARTIFACT_FILE_CONSTRAINTS[input.purpose];
+  if (!policy || input.bytes.length < 1 || input.bytes.length > policy.maxBytes || !policy.mimeTypes.includes(input.artifact.mimeType)) {
+    throw new Error("CAPABILITY_ARTIFACT_WRITE_POLICY_DENIED");
+  }
+  const nodeProvider = await selectedNodeObjectStorageProvider(input.ownerId);
+  if (!nodeProvider && !storageBackendEnabled()) throw new Error("CORE_STORAGE_NOT_CONFIGURED");
+  const canonicalProvider = nodeProvider?.id ?? storageDriver();
+  // Canonical Node files are read in namespace=files. The adoption ledger uses
+  // the private purpose namespace; map only this byte-storage boundary.
+  const provider = nodeProvider ? capabilityNodeAdoptionStorage(nodeProvider) : new ManagedAdoptionStorageProvider(canonicalProvider as ManagedStorageProvider);
+  const repository = new CoreObjectAdoptionRepository(db.$client, { managedProvider: canonicalProvider });
+  const intent = adoptionIntent({ ...input, providerId: provider.id });
+  const result = await new TwoPhaseObjectAdopter({ provider, repository }).upload({ ...intent, body: bytesStream(input.bytes) });
+  if (!result.record.canonicalRecordId) throw new Error("ADOPTION_CANONICAL_LEDGER_INCOMPLETE");
+  return { fileId: result.record.canonicalRecordId, replayed: result.replayed };
 }
 
 /** Reconcile durable provider commits left by a process interruption. */
@@ -1034,8 +1055,7 @@ export async function readPairedNodeArtifact(input: {
   if (
     !state ||
     state.userId !== input.ownerId ||
-    !state.features.storage ||
-    !state.features.jobs
+    !state.features.storage
   ) {
     throw new Error("NODE_ARTIFACT_SOURCE_OFFLINE");
   }

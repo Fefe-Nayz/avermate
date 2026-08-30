@@ -1,5 +1,8 @@
 name: avermate
 
+x-node-environment: &node-environment
+  NODE_CAPABILITY_PROTOCOL_V1: ${NODE_CAPABILITY_PROTOCOL_V1:-false}
+
 x-node-base: &node-base
   build:
     context: ../..
@@ -22,6 +25,7 @@ services:
     <<: *node-base
     profiles: [dev-zero]
     environment:
+      <<: *node-environment
       AVERMATE_NODE_CONFIG: /data/node/avermate-node.yaml
       AVERMATE_NODE_CONTAINER_BRIDGE_PORT: "5189"
 
@@ -29,6 +33,7 @@ services:
     <<: *node-base
     profiles: [node-lite]
     environment:
+      <<: *node-environment
       AVERMATE_NODE_CONFIG: /data/node/avermate-node.yaml
       AVERMATE_NODE_CONFIG_TEMPLATE: /config/profile.yaml
       AVERMATE_NODE_CONTAINER_BRIDGE_PORT: "5189"
@@ -42,6 +47,7 @@ services:
     <<: *node-base
     profiles: [node-storage]
     environment:
+      <<: *node-environment
       AVERMATE_NODE_CONFIG: /data/node/avermate-node.yaml
       AVERMATE_NODE_CONFIG_TEMPLATE: /config/profile.yaml
       AVERMATE_NODE_CONTAINER_BRIDGE_PORT: "5189"
@@ -80,6 +86,7 @@ services:
     <<: *node-base
     profiles: [node-creator]
     environment:
+      <<: *node-environment
       AVERMATE_NODE_CONFIG: /data/node/avermate-node.yaml
       AVERMATE_NODE_CONFIG_TEMPLATE: /config/profile.yaml
       AVERMATE_NODE_CONTAINER_BRIDGE_PORT: "5189"
@@ -91,6 +98,7 @@ services:
     <<: *node-base
     profiles: [node-local-gpu]
     environment:
+      <<: *node-environment
       AVERMATE_NODE_CONFIG: /data/node/avermate-node.yaml
       AVERMATE_NODE_CONFIG_TEMPLATE: /config/profile.yaml
       AVERMATE_NODE_CONTAINER_BRIDGE_PORT: "5189"
@@ -113,6 +121,7 @@ services:
     <<: *node-base
     profiles: [node-observable]
     environment:
+      <<: *node-environment
       AVERMATE_NODE_CONFIG: /data/node/avermate-node.yaml
       AVERMATE_NODE_CONFIG_TEMPLATE: /config/profile.yaml
       AVERMATE_NODE_CONTAINER_BRIDGE_PORT: "5189"
@@ -124,6 +133,7 @@ services:
     <<: *node-base
     profiles: [full-self-host]
     environment:
+      <<: *node-environment
       AVERMATE_NODE_CONFIG: /data/node/avermate-node.yaml
       AVERMATE_NODE_CONFIG_TEMPLATE: /config/profile.yaml
       AVERMATE_NODE_CONTAINER_BRIDGE_PORT: "5189"
@@ -171,6 +181,14 @@ services:
       COHERE_API_KEY: ${COHERE_API_KEY:-}
       INFERENCE_PROVIDER: ${INFERENCE_PROVIDER:-}
       INFERENCE_API_KEY: ${INFERENCE_API_KEY:-}
+      CAPABILITY_REGISTRY_SHADOW: ${CAPABILITY_REGISTRY_SHADOW:-false}
+      CAPABILITY_TTS_EXECUTION: ${CAPABILITY_TTS_EXECUTION:-legacy}
+      CAPABILITY_STT_EXECUTION: ${CAPABILITY_STT_EXECUTION:-legacy}
+      CAPABILITY_OCR_EXECUTION: ${CAPABILITY_OCR_EXECUTION:-legacy}
+      CAPABILITY_DOCUMENT_EXTRACTION_EXECUTION: ${CAPABILITY_DOCUMENT_EXTRACTION_EXECUTION:-legacy}
+      CAPABILITY_RERANK_EXECUTION: ${CAPABILITY_RERANK_EXECUTION:-legacy}
+      CAPABILITY_EMBEDDING_EXECUTION: ${CAPABILITY_EMBEDDING_EXECUTION:-legacy}
+      CAPABILITY_LANGUAGE_EXECUTION: ${CAPABILITY_LANGUAGE_EXECUTION:-legacy}
       TECTONIC_ONLY_CACHED: "true"
       HTTP_PROXY: ${PLAN032_EGRESS_PROXY:-}
       HTTPS_PROXY: ${PLAN032_EGRESS_PROXY:-}
