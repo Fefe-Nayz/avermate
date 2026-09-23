@@ -37,6 +37,8 @@ function __ensureGlobalPopListener() {
 // Works by pushing a history entry when open, then consuming it on close or back.
 const Drawer = ({
   shouldScaleBackground = true,
+  // ViewportKeyboardSync and DrawerContent own keyboard positioning. Avoid
+  // competing inline height/bottom updates from Vaul.
   repositionInputs = false,
   open: controlledOpen,
   defaultOpen,
@@ -226,7 +228,11 @@ const DrawerContent = React.forwardRef<
       className={cn(
         "fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col overflow-y-auto overflow-x-hidden overscroll-contain rounded-t-[10px] border bg-background after:hidden after:content-none",
         className,
-        "max-h-[calc(var(--visual-viewport-height,100dvh)-max(1rem,var(--safe-area-inset-top)))] pl-[var(--safe-area-inset-left)] pr-[var(--safe-area-inset-right)] pb-[max(var(--keyboard-inset-bottom,0px),var(--safe-area-inset-bottom))]"
+        "max-h-[calc(var(--visual-viewport-height,100dvh)-max(1rem,var(--safe-area-inset-top)))] pl-[var(--safe-area-inset-left)] pr-[var(--safe-area-inset-right)] pb-[max(var(--keyboard-inset-bottom,0px),var(--safe-area-inset-bottom))]",
+        // iOS overlays the keyboard instead of resizing the layout viewport.
+        // Move above it without subtracting its height again via padding. The
+        // touch-callout feature query leaves Android's existing layout intact.
+        "supports-[-webkit-touch-callout:none]:bottom-[var(--keyboard-inset-bottom,0px)] supports-[-webkit-touch-callout:none]:pb-[var(--safe-area-inset-bottom)]"
       )}
       {...props}
     >
