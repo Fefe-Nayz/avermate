@@ -20,6 +20,7 @@ Les associations sont enregistrées en base, par utilisateur et paire orientée 
 - **Au même stade** : la référence s’arrête au même nombre de jours calendaires depuis le début de l’année/période. Les périodes cumulatives commencent à la première période incluse. Les changements d’heure et années bissextiles sont traités en jours calendaires.
 - **Période de référence complète** : les moyennes de référence des cartes, du tableau et du radar utilisent toute la période disponible. Les courbes d’évolution gardent leur alignement chronologique sur l’intervalle visible de l’année consultée ; elles ne projettent pas de notes futures.
 - Le mode historique existant déplace également la date de comparaison, de façon relative pour l’autre année.
+- Un onglet laissé ouvert actualise la comparaison à minuit local et au retour dans l’onglet ; une date historique explicite reste fixe.
 - Les deux années conservent leurs matières, hiérarchies et coefficients : la moyenne générale porte sur leur programme respectif. Les associations servent aux comparaisons par matière, sans modifier les notes ou coefficients.
 - Les calculs réutilisent `average()` et sont normalisés sur 20. Les cartes/tableaux convertissent l’affichage au barème de l’année consultée ; les graphiques restent sur 20. Les écarts sont exprimés en points, et non en pourcentages.
 - Aucune note, zéro réel et absence de correspondance restent distincts. Une référence manquante ne devient jamais un zéro dans le radar.
@@ -28,15 +29,18 @@ Les associations sont enregistrées en base, par utilisateur et paire orientée 
 
 ## Données et déploiement
 
-Migrations : `0006_year_comparisons.sql` puis `0007_year_comparison_custom_averages.sql` dans `apps/api/drizzle`. La seconde ajoute une colonne sans modifier les correspondances existantes. Le démarrage Docker de l’API exécute déjà les migrations. Pour une API locale, lancer `bun run db:migrate` depuis `apps/api`, avec sa configuration habituelle, avant de démarrer.
+Migrations : `0006_year_comparisons.sql` puis `0007_year_comparison_custom_averages.sql` dans `apps/api/drizzle`. La seconde ajoute une colonne sans modifier les correspondances existantes. Le démarrage Docker et `bun run start` exécutent les migrations versionnées avant le serveur, avec le même journal Drizzle pour SQLite et libSQL distant. Un échec bloque le démarrage : aucun repli automatique vers `db:push`. Relancer une version déjà migrée ne réapplique pas les migrations. La commande explicite reste `bun run db:migrate` depuis `apps/api`, avec sa configuration habituelle.
+
+Dokploy construit les Dockerfiles API et client depuis `main`. Pour cette mise à jour, déployer et vérifier l’API et sa migration avant l’interface web. Contrôler les logs de migration, le journal `__drizzle_migrations`, la présence de `year_comparisons.custom_average_map`, puis les réponses HTTP et le déploiement web. Les migrations sont additives : l’ancienne interface reste compatible pendant la transition.
 
 API : `GET` et `PUT /api/comparisons/:yearId/:referenceYearId`, avec `{ subjectMap, periodMap, customAverageMap }`. Pour les anciens clients, omettre `customAverageMap` conserve sa valeur ; un objet vide l’efface explicitement. Les identifiants doivent appartenir aux deux années du compte authentifié ; les années doivent être distinctes. `null` conserve une exclusion explicite. La période synthétique `full-year` est implicite et n’est pas envoyée. Les références supprimées sont nettoyées, et supprimer une année ou un compte supprime ses configurations.
 
 ## Vérification du 16 octobre 2026
 
-- Client : `bun test` — **39 tests réussis**, dont 20 cas dédiés à la comparaison.
+- Client : `bun test` — **40 tests réussis**, dont 21 cas dédiés à la comparaison.
 - API : `bun test src/routes/comparisons.test.ts` — **14 tests d’intégration réussis**, dont la migration d’une configuration existante, avec les vraies migrations sur une base en mémoire.
-- Client : `bunx tsc --noEmit` réussi après ajout des moyennes personnalisées. Le build de production avait été vérifié avant cet ajout.
+- Déploiement : **5 tests de migration réussis**, couvrant installation, mise à niveau depuis `0005`, redémarrage idempotent, rollback transactionnel et blocage réel de la commande de démarrage en cas d’échec.
+- Client : `bunx tsc --noEmit` et build de production Next.js 16.3.3 réussis après les derniers changements, dans une copie isolée avec installation du lockfile. Les 23 pages et la sortie standalone attendue par Docker sont générées.
 - Parcours navigateur local avec compte fictif et API de correspondances réelle : association manuelle de Physique à Physique appliquée, sauvegarde, navigation entre vues, détail matière, conservation de la configuration après rechargement et retour à la paire enregistrée, arrêt/reprise.
 - Largeur mobile simulée de 390 px : aucun débordement horizontal dans le panneau ; commande d’enregistrement accessible en bas du panneau défilant. Aucun test sur téléphone physique.
 - Valeurs contrôlées : générale **15 / 20 contre 11,75** (+3,25 points), mathématiques **15 contre 11,5** (+3,5), physique **14 contre 11** (+3), anglais **17 contre 14** (+3). Les notes de référence sont stockées sur 100.
@@ -44,4 +48,4 @@ API : `GET` et `PUT /api/comparisons/:yearId/:referenceYearId`, avec `{ subjectM
 - ESLint ne démarre pas correctement avec la combinaison existante ESLint 10 / eslint-plugin-react (`contextOrFilename.getFilename`). Le contrôle API signale les alias internes non résolus du paquet tiers `@limitable/ratelimit` ; aucune erreur des fichiers de la fonctionnalité.
 - Après refonte de l’interface : captures d’écran inspectées sur ordinateur et à 390 px, sélecteurs shadcn et correspondances vérifiés, activation/désactivation et changement de périmètre enregistrés, brouillon conservé après un aller-retour entre deux années. Le formulaire mobile étendu reste entre y=16 et y=844, avec son bouton d’enregistrement à y=791–827 et un corps défilant ; largeur du document 390 px. Contrôle TypeScript client réussi après refonte.
 
-La fonctionnalité n’est pas publiée en production. Une démonstration locale est disponible pendant cette session sur `http://localhost:3105/dashboard`, avec des données fictives et une base en mémoire réinitialisée au redémarrage.
+Une démonstration locale est disponible pendant cette session sur `http://localhost:3105/dashboard`, avec des données fictives et une base en mémoire réinitialisée au redémarrage.

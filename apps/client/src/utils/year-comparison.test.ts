@@ -143,6 +143,24 @@ describe("year comparison calculation", () => {
     assert.deepEqual(upcoming.referenceSubjects, []);
   });
 
+  it("advances both comparison cutoffs on a new day while keeping an explicit snapshot fixed", () => {
+    const referenceSubjects = [subject("r-maths", "Maths", { grades: [
+      grade(1000, "2024-09-10"), grade(2000, "2024-09-11"),
+    ] })];
+    const sourceSubjects = [subject("maths", "Maths", { grades: [
+      grade(1000, "2025-09-10"), grade(2000, "2025-09-11"),
+    ] })];
+    const dayOne = createYearComparison({ ...defaults, referenceSubjects });
+    const dayTwo = createYearComparison({ ...defaults, referenceSubjects, now: new Date("2025-09-11T12:00:00") });
+    const snapshot = createYearComparison({ ...defaults, referenceSubjects, now: new Date("2025-09-11T12:00:00"), snapshotDate: "2025-09-10" });
+    assert.equal(dayOne.getReferenceAverage("maths"), 10);
+    assert.equal(dayTwo.getReferenceAverage("maths"), 15);
+    assert.equal(snapshot.getReferenceAverage("maths"), 10);
+    assert.equal(average("maths", dayOne.scopeCurrentSubjects(sourceSubjects)), 10);
+    assert.equal(average("maths", dayTwo.scopeCurrentSubjects(sourceSubjects)), 15);
+    assert.equal(average("maths", snapshot.scopeCurrentSubjects(sourceSubjects)), 10);
+  });
+
   it("scopes current subjects at the same progress while preserving virtual hierarchy nodes", () => {
     const source = [subject("general-average", "General", { isDisplaySubject: true }),
       subject("maths", "Maths", { parentId: "general-average", grades: [

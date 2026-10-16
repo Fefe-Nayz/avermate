@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api";
 import { authClient } from "@/lib/auth";
@@ -19,6 +19,50 @@ import { useYears } from "./use-years";
 type ComparisonResponse = { comparison: YearComparison | null };
 const comparisonKey = (userId: string, yearId: string, referenceYearId: string) =>
   ["year-comparison", userId, yearId, referenceYearId] as const;
+
+function localComparisonDate() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+// A single daily timer serves every comparison card/chart in the tab. Focus and
+// visibility changes also refresh the day after the browser has been suspended.
+let comparisonDate = localComparisonDate();
+let dayRolloverTimer: number | undefined;
+const comparisonDateListeners = new Set<() => void>();
+
+function refreshComparisonDate() {
+  const nextDate = localComparisonDate();
+  if (nextDate !== comparisonDate) {
+    comparisonDate = nextDate;
+    comparisonDateListeners.forEach((listener) => listener());
+  }
+  window.clearTimeout(dayRolloverTimer);
+  if (comparisonDateListeners.size === 0) return;
+  const nextMidnight = new Date();
+  nextMidnight.setHours(24, 0, 0, 0);
+  dayRolloverTimer = window.setTimeout(refreshComparisonDate, nextMidnight.getTime() - Date.now() + 50);
+}
+
+function subscribeComparisonDate(listener: () => void) {
+  comparisonDateListeners.add(listener);
+  if (comparisonDateListeners.size === 1) {
+    refreshComparisonDate();
+    window.addEventListener("focus", refreshComparisonDate);
+    document.addEventListener("visibilitychange", refreshComparisonDate);
+  }
+  return () => {
+    comparisonDateListeners.delete(listener);
+    if (comparisonDateListeners.size === 0) {
+      window.clearTimeout(dayRolloverTimer);
+      window.removeEventListener("focus", refreshComparisonDate);
+      document.removeEventListener("visibilitychange", refreshComparisonDate);
+    }
+  };
+}
+
+const getComparisonDateSnapshot = () => comparisonDate;
+const getComparisonDateServerSnapshot = () => "";
 
 /** Reads raw query data: the timeline's absolute date must never filter another year. */
 function useRawSubjects(yearId: string, enabled: boolean) {
@@ -149,14 +193,16 @@ export function useYearComparisonSettings(referenceYearIdOverride?: string, opti
 export function useYearComparison(periodId?: string, subjectId?: string) {
   const settings = useYearComparisonSettings();
   const timeline = useTimelineModeState();
+  const currentDate = useSyncExternalStore(subscribeComparisonDate, getComparisonDateSnapshot, getComparisonDateServerSnapshot);
   const snapshotDateValue = timeline.isActive ? timeline.snapshotDateValue : null;
   const { currentYear, referenceYear, sourcePeriods, referencePeriods, referenceSubjects, subjectMap, periodMap,
     sourceCustomAverages, referenceCustomAverages, customAverageMap, scope } = settings;
-  const model = useMemo(() => currentYear && referenceYear ? createYearComparison({
+  const model = useMemo(() => currentYear && referenceYear && currentDate ? createYearComparison({
     currentYear, referenceYear, sourcePeriods, referencePeriods, referenceSubjects,
-    subjectMap, periodMap, customAverageMap, sourceCustomAverages, referenceCustomAverages, periodId, scope, snapshotDate: snapshotDateValue ?? undefined,
+    subjectMap, periodMap, customAverageMap, sourceCustomAverages, referenceCustomAverages, periodId, scope,
+    snapshotDate: snapshotDateValue ?? undefined, now: new Date(`${currentDate}T12:00:00`),
   }) : null, [currentYear, referenceYear, sourcePeriods, referencePeriods, referenceSubjects,
-    subjectMap, periodMap, customAverageMap, sourceCustomAverages, referenceCustomAverages, periodId, scope, snapshotDateValue]);
+    subjectMap, periodMap, customAverageMap, sourceCustomAverages, referenceCustomAverages, periodId, scope, snapshotDateValue, currentDate]);
   const active = settings.enabled && !!referenceYear;
   // Suggestions are a setup aid. Only explicitly saved mappings drive a live comparison.
   const ready = active && !settings.loading && !settings.error && !!settings.savedComparison && !!model?.ready;

@@ -25,4 +25,5 @@ USER bun
 
 EXPOSE 5000/tcp
 
-ENTRYPOINT [ "sh", "-c", "bun run db:migrate || bun run db:push; exec bun run start" ]
+# A failed migration must stop this deployment. Never fall back to schema push.
+ENTRYPOINT [ "sh", "-c", "bun run db:migrate && exec bun run src/index.ts" ]
