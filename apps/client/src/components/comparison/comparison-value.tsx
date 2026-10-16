@@ -1,6 +1,8 @@
 "use client";
 
 import { useFormatter, useTranslations } from "next-intl";
+import { TrendingDown, TrendingUp } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import type { useYearComparison } from "@/hooks/use-year-comparison";
 import { cn } from "@/lib/utils";
 
@@ -31,11 +33,11 @@ export function ComparisonValue({ comparison, currentValue, subjectId, outOf = 2
           : t("referenceValue", { year: comparison.referenceYear?.name ?? "", value: number(reference * scale) })}
       </span>
       {difference !== null && (
-        <span className={cn("rounded-md px-1.5 py-0.5 font-medium tabular-nums", difference > 0
-          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-          : difference < 0 ? "bg-rose-500/10 text-rose-700 dark:text-rose-400" : "bg-muted text-muted-foreground")}>
+        <Badge variant="outline">
+          {difference > 0 && <TrendingUp data-icon="inline-start" aria-hidden="true" />}
+          {difference < 0 && <TrendingDown data-icon="inline-start" aria-hidden="true" />}
           {t("points", { value: `${difference > 0 ? "+" : ""}${number(difference)}` })}
-        </span>
+        </Badge>
       )}
     </div>
   );

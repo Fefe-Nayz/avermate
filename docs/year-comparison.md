@@ -5,11 +5,13 @@ Implémentation sur `codex/year-comparison`, issue de `origin/main` (`81bce8b4`)
 ## Utilisation
 
 1. Sélectionner l’année à consulter avec le sélecteur habituel.
-2. Cliquer sur **Comparer** sous la navigation (visible à partir de deux années).
-3. Choisir l’année de référence et vérifier les correspondances proposées pour les matières et les périodes. Les noms et chemins hiérarchiques non ambigus sont proposés automatiquement. Les périodes peuvent également être proposées par ordre quand leurs structures concordent.
+2. Cliquer sur le bouton **Comparer les années** (icône de deux flèches) à côté du sélecteur d’année, visible à partir de deux années. Aucun bandeau de comparaison n’est ajouté à la page.
+3. Choisir l’année de référence et le périmètre. Déplier **Matières** ou **Périodes** pour vérifier les correspondances. Les noms et chemins hiérarchiques non ambigus sont proposés automatiquement. Les périodes peuvent également être proposées par ordre quand leurs structures concordent.
 4. Associer manuellement les matières renommées, ou conserver **Sans correspondance**. Chaque matière/période de référence ne peut être utilisée qu’une fois.
-5. **Enregistrer et comparer** active les écarts sur la vue d’ensemble, le tableau des notes, le détail des matières et les graphiques (évolution générale, radar, évolution de matière, moyenne historique dans le graphique des notes).
-6. **Arrêter** masque la comparaison ; **Reprendre** la réactive sans refaire la configuration.
+5. **Comparer** active les écarts sur la vue d’ensemble, le tableau des notes, le détail des matières et les graphiques (évolution générale, radar, évolution de matière, moyenne historique dans le graphique des notes). Le bouton dans l’en-tête indique la comparaison active et son infobulle précise l’année.
+6. Rouvrir la fenêtre pour **Désactiver** la comparaison, changer le périmètre ou **Enregistrer** des ajustements. Après désactivation, **Comparer** réutilise les correspondances mémorisées. Les brouillons sont conservés si l’on change d’année de référence dans la même fenêtre ; fermer sans enregistrer les abandonne.
+
+La configuration reprend les composants du projet : formulaire React Hook Form / shadcn, Select, Accordion, Button et Credenza (Dialog sur ordinateur, Drawer sur mobile). Les écarts utilisent Badge. Les contrôles d’enregistrement restent accessibles pendant le défilement des correspondances.
 
 Les associations sont enregistrées en base, par utilisateur et paire orientée d’années. Le choix du mode, de l’année de référence et du périmètre est conservé dans ce navigateur, séparément pour chaque compte et année consultée. Chaque appareil retrouve les correspondances enregistrées après sélection de la même paire.
 
@@ -39,6 +41,6 @@ API : `GET` et `PUT /api/comparisons/:yearId/:referenceYearId`, avec `{ subjectM
 - Largeur mobile simulée de 390 px : aucun débordement horizontal dans le panneau ; commande d’enregistrement accessible en bas du panneau défilant. Aucun test sur téléphone physique.
 - Valeurs contrôlées : générale **15 / 20 contre 11,75** (+3,25 points), mathématiques **15 contre 11,5** (+3,5), physique **14 contre 11** (+3), anglais **17 contre 14** (+3). Les notes de référence sont stockées sur 100.
 - ESLint ne démarre pas correctement avec la combinaison existante ESLint 10 / eslint-plugin-react (`contextOrFilename.getFilename`). Le contrôle API signale les alias internes non résolus du paquet tiers `@limitable/ratelimit` ; aucune erreur des fichiers de la fonctionnalité.
-- Les captures d’écran du navigateur intégré ont expiré ; la validation interactive repose sur le DOM, les valeurs rendues et les mesures de géométrie, sans preuve visuelle par capture.
+- Après refonte de l’interface : captures d’écran inspectées sur ordinateur et à 390 px, sélecteurs shadcn et correspondances vérifiés, activation/désactivation et changement de périmètre enregistrés, brouillon conservé après un aller-retour entre deux années. Le formulaire mobile étendu reste entre y=16 et y=844, avec son bouton d’enregistrement à y=791–827 et un corps défilant ; largeur du document 390 px. Contrôle TypeScript client réussi après refonte.
 
 La fonctionnalité n’est pas publiée en production. Une démonstration locale est disponible pendant cette session sur `http://localhost:3105/dashboard`, avec des données fictives et une base en mémoire réinitialisée au redémarrage.

@@ -4,6 +4,7 @@ import * as React from "react";
 import AccountDropdown from "@/components/buttons/account/account-dropdown";
 import Logo from "@/components/logo";
 import YearWorkspaceSelect from "../selects/year-workspace-select";
+import YearComparisonControl from "@/components/comparison/year-comparison-control";
 import { useScrollDirection } from "@/hooks/use-scroll-direction";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePathname, useParams } from "next/navigation";
@@ -152,13 +153,14 @@ export default function DashboardHeader({
             {!hideWorkspaces && (
               <div
                 className={cn(
-                  "transition-all duration-300",
+                  "flex items-center gap-1 transition-all duration-300",
                   isCompact
                     ? "w-0 overflow-hidden opacity-0 pointer-events-none"
                     : "w-auto overflow-visible opacity-100"
                 )}
               >
                 <YearWorkspaceSelect />
+                <YearComparisonControl />
               </div>
             )}
             <AccountDropdown />

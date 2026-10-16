@@ -1,6 +1,5 @@
 "use client";
 
-import YearComparisonControl from "@/components/comparison/year-comparison-control";
 import DashboardHeader from "@/components/dashboard/dashboard-header";
 import TimelineModeBanner from "@/components/dashboard/timeline-mode-banner";
 import DashboardNav from "@/components/nav/dashboard-nav";
@@ -21,7 +20,6 @@ export default function AuthenticatedLayout({
 
       <DashboardNav />
       <TimelineModeBanner />
-      <YearComparisonControl />
 
       {/* Page */}
       <div
