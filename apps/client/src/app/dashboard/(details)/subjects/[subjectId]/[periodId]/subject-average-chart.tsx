@@ -2,6 +2,7 @@
 
 import { Card } from "@/components/ui/card";
 import { useTimelineModeState } from "@/hooks/use-timeline-mode";
+import { useYearComparison } from "@/hooks/use-year-comparison";
 import {
   ChartContainer,
   ChartTooltip,
@@ -87,6 +88,7 @@ interface CustomTooltipContentProps {
   chartData: ChartDataPoint[];
   chartConfig: ChartConfig;
   formatDates: ReturnType<typeof useFormatDates>;
+  comparisonEnabled: boolean;
 }
 
 function findNearestDatum(
@@ -117,15 +119,19 @@ function SubjectActiveDot({
   dataKey,
   fill,
   chartData,
+  exactDate = false,
 }: {
   dataKey: string;
   fill: string;
   chartData: ChartDataPoint[];
+  exactDate?: boolean;
 }) {
   const activeLabel = useActiveTooltipLabel();
   if (!activeLabel) return null;
 
-  const nearestDatum = findNearestDatum(chartData, String(activeLabel), dataKey);
+  const nearestDatum = exactDate
+    ? chartData.find((point) => point.date === String(activeLabel))
+    : findNearestDatum(chartData, String(activeLabel), dataKey);
   if (!nearestDatum || nearestDatum[dataKey] === undefined) return null;
 
   const value = nearestDatum[dataKey];
@@ -149,17 +155,22 @@ function CustomTooltipContent({
   chartData,
   chartConfig,
   formatDates,
+  comparisonEnabled,
 }: CustomTooltipContentProps) {
   const payload = Object.entries(chartConfig).map(([dataKey, config]) => {
     const nearestDatum = label
-      ? findNearestDatum(chartData, label, dataKey)
+      ? comparisonEnabled
+        ? chartData.find((point) => point.date === label)
+        : findNearestDatum(chartData, label, dataKey)
       : undefined;
     const value = nearestDatum?.[dataKey];
     return {
       dataKey,
       value: value,
       color: config.color,
-      name: config.label,
+      name: dataKey === "referenceAverage" && nearestDatum?.referenceDate
+        ? `${config.label} · ${formatDates.formatIntermediate(new Date(`${nearestDatum.referenceDate}T12:00:00`))}`
+        : config.label,
       payload: nearestDatum,
     };
   });
@@ -198,19 +209,30 @@ export default function SubjectAverageChart({
 }) {
   const formatter = useFormatter();
   const t = useTranslations("Dashboard.Charts.SubjectAverageChart");
+  const comparisonT = useTranslations("YearComparison");
   const formatDates = useFormatDates(formatter);
   const { settings, isLoaded } = useChartSettings();
   const showTrendLine = isLoaded && settings.showTrendLine;
   const { isActive: timelineEnabled, snapshotDate } = useTimelineModeState();
+  const comparison = useYearComparison(period.id, subjectId);
+  const comparisonEnabled = comparison.active && comparison.ready && !subjectId.startsWith("ca");
+  const currentLabel = comparison.currentYear?.name ?? t("average");
+  const referenceLabel = comparison.referenceYear?.name ?? "";
 
-  const { childrenAverage, chartData, chartConfig, yAxisDomain } = (() => {
+  const { childrenAverage, chartData, chartConfig, yAxisDomain, hasReferenceData } = (() => {
     const childrenIds = getChildren(subjects, subjectId);
+    const chartPeriod = comparisonEnabled && period.id === "full-year" && comparison.currentYear
+      ? { ...period, startAt: comparison.currentYear.startDate, endAt: comparison.currentYear.endDate }
+      : period;
     const endDate = startOfDay(
-      getVisibleChartEndDate(new Date(period.endAt), {
+      getVisibleChartEndDate(new Date(chartPeriod.endAt), {
         snapshotDate: timelineEnabled ? snapshotDate : null,
       })
     );
-    const startDate = startOfDay(getCumulativeStartDate(periods, period));
+    const startDate = startOfDay(getCumulativeStartDate(periods, chartPeriod));
+    const chartSubjects = comparisonEnabled
+      ? comparison.scopeCurrentSubjects(subjects)
+      : subjects;
 
     const dates: Date[] = [];
     for (
@@ -234,20 +256,33 @@ export default function SubjectAverageChart({
       ? childrenObjects.map((child, index) => ({
       id: child.id,
       name: child.name,
-      average: averageOverTime(subjects, child.id, period, periods),
+      average: averageOverTime(chartSubjects, child.id, chartPeriod, periods),
       color: predefinedColors[index % predefinedColors.length],
       }))
       : [];
 
-    const mainAverages = averageOverTime(subjects, subjectId, period, periods);
+    const mainAverages = averageOverTime(chartSubjects, subjectId, chartPeriod, periods);
+    const referenceSeries = comparisonEnabled
+      ? comparison.getReferenceSeries(dates.map((date) => date.toISOString()), subjectId)
+      : [];
+    let currentAverage: number | null = null;
+    const childAverages: Record<string, number | null> = {};
 
-    const baseChartData = dates.map((date, index) => ({
-      date: date.toISOString(),
-      average: mainAverages[index],
-      ...Object.fromEntries(
-        childrenAverage.map((child) => [child.id, child.average[index]])
-      ),
-    }));
+    const baseChartData = dates.map((date, index) => {
+      currentAverage = mainAverages[index] ?? currentAverage;
+      return {
+        date: date.toISOString(),
+        average: comparisonEnabled ? currentAverage : mainAverages[index],
+        referenceAverage: referenceSeries[index]?.value ?? null,
+        referenceDate: referenceSeries[index]?.referenceDate ?? null,
+        ...Object.fromEntries(
+          childrenAverage.map((child) => {
+            childAverages[child.id] = child.average[index] ?? childAverages[child.id] ?? null;
+            return [child.id, comparisonEnabled ? childAverages[child.id] : child.average[index]];
+          })
+        ),
+      };
+    });
 
     const trendLine = showTrendLine
       ? calculateTrendLineData(baseChartData, "average", { subdivisions: settings.trendLineSubdivisions })
@@ -259,18 +294,24 @@ export default function SubjectAverageChart({
 
     const chartConfig = {
       average: {
-        label: t("average"),
+        label: comparisonEnabled ? currentLabel : t("average"),
         color: "var(--chart-1)",
       },
       ...Object.fromEntries(
         childrenAverage.map((child) => [
           child.id,
           {
-            label: child.name,
+            label: comparisonEnabled ? `${child.name} · ${currentLabel}` : child.name,
             color: child.color,
           },
         ])
       ),
+      ...(comparisonEnabled ? {
+        referenceAverage: {
+          label: referenceLabel,
+          color: "var(--chart-2)",
+        },
+      } : {}),
     };
 
     // Calculate Y-axis domain based on all numeric values in chartData
@@ -282,11 +323,27 @@ export default function SubjectAverageChart({
       settings.autoZoomYAxis
     );
 
-    return { childrenAverage, chartData, chartConfig, yAxisDomain };
+    return {
+      childrenAverage,
+      chartData,
+      chartConfig,
+      yAxisDomain,
+      hasReferenceData: referenceSeries.some((point) => point.value !== null),
+    };
   })();
 
   return (
     <Card className="p-4">
+      {comparisonEnabled && (
+        <div className="space-y-2 pb-4 text-xs text-muted-foreground">
+          <div className="flex flex-wrap gap-x-4 gap-y-2">
+            <span className="flex items-center gap-2"><span aria-hidden="true" className="w-6 border-t-2 border-[var(--chart-1)]" />{currentLabel}</span>
+            <span className="flex items-center gap-2"><span aria-hidden="true" className="w-6 border-t-2 border-dashed border-[var(--chart-2)]" />{referenceLabel}</span>
+          </div>
+          <p>{comparisonT("chartAlignment")}</p>
+          {!hasReferenceData && <p>{comparisonT("noChartData")}</p>}
+        </div>
+      )}
       <ChartContainer config={chartConfig} className="h-[400px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData} margin={{ left: -20 }}>
@@ -317,6 +374,7 @@ export default function SubjectAverageChart({
                   chartData={chartData}
                   chartConfig={chartConfig}
                   formatDates={formatDates}
+                  comparisonEnabled={comparisonEnabled}
                 />
               )}
             />
@@ -325,7 +383,7 @@ export default function SubjectAverageChart({
               <Line
                 key={child.id}
                 dataKey={child.id}
-                type="monotone"
+                type={comparisonEnabled ? "stepAfter" : "monotone"}
                 stroke={child.color}
                 connectNulls={true}
                 dot={false}
@@ -335,13 +393,26 @@ export default function SubjectAverageChart({
 
             <Line
               dataKey="average"
-              type="monotone"
+              type={comparisonEnabled ? "stepAfter" : "monotone"}
               stroke="var(--chart-1)"
               strokeWidth={3}
               connectNulls={true}
               dot={false}
               activeDot={false}
             />
+
+            {comparisonEnabled && (
+              <Line
+                dataKey="referenceAverage"
+                type="stepAfter"
+                stroke="var(--chart-2)"
+                strokeWidth={2}
+                strokeDasharray="6 4"
+                connectNulls={false}
+                dot={false}
+                activeDot={{ r: 4, fill: "var(--chart-2)", strokeWidth: 0 }}
+              />
+            )}
 
             {showTrendLine ? (
               <Line
@@ -362,12 +433,14 @@ export default function SubjectAverageChart({
                 dataKey={child.id}
                 fill={child.color}
                 chartData={chartData}
+                exactDate={comparisonEnabled}
               />
             ))}
             <SubjectActiveDot
               dataKey="average"
               fill="var(--chart-1)"
               chartData={chartData}
+              exactDate={comparisonEnabled}
             />
           </LineChart>
         </ResponsiveContainer>

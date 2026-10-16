@@ -1,5 +1,7 @@
 "use client";
 
+import { ComparisonValue } from "@/components/comparison/comparison-value";
+import { useYearComparison } from "@/hooks/use-year-comparison";
 import { DifferenceBadge } from "@/app/dashboard/(details)/grades/[gradeId]/difference-badge";
 import SubjectMoreButton from "@/components/buttons/dashboard/subject/subject-more-button";
 import DataCard from "@/components/dashboard/data-card";
@@ -100,6 +102,8 @@ function SubjectWrapper({
   timelineControl?: React.ReactNode;
 }) {
   const t = useTranslations("Dashboard.Pages.SubjectWrapper");
+  const comparison = useYearComparison(period.id, subject.id);
+  subjects = comparison.scopeCurrentSubjects(subjects);
 
   const { activeId } = useActiveYearStore();
   const { data: years } = useYears();
@@ -341,6 +345,7 @@ function SubjectWrapper({
             outOf={yearDefaultOutOf}
             isAverage={true}
           />
+          <ComparisonValue comparison={comparison} currentValue={average(subject.id, subjects)} subjectId={subject.id} outOf={yearDefaultOutOf} />
         </DataCard>
 
         {/* Coefficient */}

@@ -4,6 +4,7 @@ import {
   foreignKey,
   index,
   integer,
+  primaryKey,
   sqliteTable,
   text,
   uniqueIndex,
@@ -335,6 +336,28 @@ export const userSettingsRelations = relations(userSettings, ({ one }) => ({
     fields: [userSettings.userId],
     references: [users.id],
   }),
+}));
+
+// A separate record for every ordered pair keeps a user's mappings when they
+// switch between reference years. Academic data itself is never modified.
+export const yearComparisons = sqliteTable("year_comparisons", {
+  userId: text()
+    .notNull()
+    .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
+  yearId: text()
+    .notNull()
+    .references(() => years.id, { onUpdate: "cascade", onDelete: "cascade" }),
+  referenceYearId: text()
+    .notNull()
+    .references(() => years.id, { onUpdate: "cascade", onDelete: "cascade" }),
+  subjectMap: text().notNull().default("{}"),
+  periodMap: text().notNull().default("{}"),
+  createdAt: integer({ mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer({ mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (t) => ({
+  pairKey: primaryKey({ columns: [t.userId, t.yearId, t.referenceYearId] }),
+  yearIdIdx: index("year_comparisons_year_id_idx").on(t.yearId),
+  referenceYearIdIdx: index("year_comparisons_reference_year_id_idx").on(t.referenceYearId),
 }));
 
 export const sessions = sqliteTable("sessions", {

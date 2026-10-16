@@ -16,6 +16,8 @@ import yearReviewRoutes from "@/routes/year-review";
 import adminRoutes from "@/routes/admin";
 import announcementsRoutes from "@/routes/announcements";
 import settingsRoutes from "@/routes/settings";
+import { createComparisonsRoutes } from "@/routes/comparisons";
+import { db } from "@/db";
 // import cardsRoute from "@/routes/cards";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -76,6 +78,8 @@ app.route("/admin", adminRoutes);
 app.route("/announcements", announcementsRoutes);
 
 app.route("/settings", settingsRoutes);
+
+app.route("/comparisons", createComparisonsRoutes(db));
 
 // app.route("/cards", cardsRoute);
 
