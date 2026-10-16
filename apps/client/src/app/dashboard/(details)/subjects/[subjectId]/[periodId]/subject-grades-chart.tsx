@@ -2,6 +2,7 @@
 
 import { Card } from "@/components/ui/card";
 import { useTimelineModeState } from "@/hooks/use-timeline-mode";
+import { useYearComparison } from "@/hooks/use-year-comparison";
 import {
     ChartContainer,
     ChartTooltip,
@@ -31,6 +32,7 @@ import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
 import { PartialGrade } from "@/types/grade";
 import { useChartSettings } from "@/hooks/use-chart-settings";
+import { startOfDay } from "date-fns";
 
 function getCumulativeStartDate(
     periods: Period[],
@@ -140,32 +142,51 @@ function CustomTooltipContent({
     label,
     chartData,
     formatDates,
+    currentLabel,
+    referenceLabel,
 }: {
     active?: boolean;
     label?: string;
     chartData: GradeDataPoint[];
     formatDates: ReturnType<typeof useFormatDates>;
+    currentLabel?: string;
+    referenceLabel?: string;
 }) {
     const nearestDatum = label ? findNearestDatum(chartData, label) : undefined;
     const hasValidData = !!(nearestDatum && nearestDatum.grade !== null);
+    const selectedDatum = chartData.find((point) => point.date === label);
+    const referenceAverage = selectedDatum?.referenceAverage;
 
     return (
         <ChartTooltipContent
-            active={active && !!label && hasValidData}
+            active={active && !!label}
             label={label ? formatDates.formatShort(new Date(label)) : undefined}
-            payload={
-                hasValidData
+            payload={[
+                ...(hasValidData
                     ? [
                         {
-                            name: nearestDatum.subjectName || "",
-                            value: `${nearestDatum.value! / 100}/${nearestDatum.outOf! / 100}`,
+                            name: currentLabel
+                                ? `${currentLabel} · ${nearestDatum.subjectName ?? ""} · ${formatDates.formatIntermediate(new Date(nearestDatum.date))}`
+                                : nearestDatum.subjectName || "",
+                            value: currentLabel
+                                ? `${nearestDatum.grade!.toFixed(2)}/20 (${nearestDatum.value! / 100}/${nearestDatum.outOf! / 100})`
+                                : `${nearestDatum.value! / 100}/${nearestDatum.outOf! / 100}`,
                             color: "var(--chart-1)",
                             dataKey: "grade",
                             payload: null,
                         },
                     ]
-                    : []
-            }
+                    : []),
+                ...(referenceLabel && typeof referenceAverage === "number" && selectedDatum?.referenceDate
+                    ? [{
+                        name: `${referenceLabel} · ${formatDates.formatIntermediate(new Date(`${selectedDatum.referenceDate}T12:00:00`))}`,
+                        value: `${referenceAverage.toFixed(2)}/20`,
+                        color: "var(--chart-2)",
+                        dataKey: "referenceAverage",
+                        payload: null,
+                    }]
+                    : []),
+            ]}
         />
     );
 }
@@ -183,12 +204,29 @@ export default function SubjectGradesChart({
 }) {
     const formatter = useFormatter();
     const t = useTranslations("Dashboard.Charts.SubjectGradesChart");
+    const comparisonT = useTranslations("YearComparison");
     const formatDates = useFormatDates(formatter);
     const { settings, isLoaded } = useChartSettings();
     const showTrendLine = isLoaded && settings.showTrendLine;
     const { isActive: timelineEnabled, snapshotDate } = useTimelineModeState();
+    const comparison = useYearComparison(period.id, subjectId);
+    const comparisonEnabled = comparison.active && comparison.ready;
+    const currentLabel = comparison.currentYear?.name ?? t("grades");
+    const referenceLabel = comparisonT("referenceAverage", { year: comparison.referenceYear?.name ?? "" });
 
-    const { chartData, chartConfig, yAxisDomain, hasGrades } = React.useMemo(() => {
+    const { chartData, chartConfig, yAxisDomain, hasGrades, hasReferenceData } = React.useMemo(() => {
+        const chartPeriod = comparisonEnabled && period.id === "full-year" && comparison.currentYear
+            ? { ...period, startAt: comparison.currentYear.startDate, endAt: comparison.currentYear.endDate }
+            : period;
+        const visibleEndDate = getVisibleChartEndDate(new Date(chartPeriod.endAt), {
+            snapshotDate: timelineEnabled ? snapshotDate : null,
+        });
+        const endDate = comparisonEnabled ? startOfDay(visibleEndDate) : visibleEndDate;
+        const periodStartDate = getCumulativeStartDate(periods, chartPeriod);
+        const startDate = comparisonEnabled ? startOfDay(periodStartDate) : periodStartDate;
+        const chartSubjects = comparisonEnabled
+            ? comparison.scopeCurrentSubjects(subjects)
+            : subjects;
         const childrenIds = getChildren(subjects, subjectId);
         const allSubjectIds = [subjectId, ...childrenIds];
         const relevantPeriodIds = getRelevantPeriodIds(period, periods);
@@ -197,7 +235,7 @@ export default function SubjectGradesChart({
         const allGrades: (PartialGrade & { subjectName: string })[] = [];
 
         for (const sid of allSubjectIds) {
-            const subj = subjects.find((s) => s.id === sid);
+            const subj = chartSubjects.find((s) => s.id === sid);
             if (!subj) continue;
 
             const grades =
@@ -220,14 +258,7 @@ export default function SubjectGradesChart({
             (a, b) => new Date(a.passedAt).getTime() - new Date(b.passedAt).getTime()
         );
 
-        const hasGrades = allGrades.length > 0;
-
         // Generate date range for x-axis
-        const endDate = getVisibleChartEndDate(new Date(period.endAt), {
-            snapshotDate: timelineEnabled ? snapshotDate : null,
-        });
-        const startDate = getCumulativeStartDate(periods, period);
-
         const dates: Date[] = [];
         for (
             let dt = new Date(startDate);
@@ -239,9 +270,11 @@ export default function SubjectGradesChart({
 
         // Create chart data with grades mapped to dates
         const baseChartData: GradeDataPoint[] = dates.map((date) => {
-            const dateStr = date.toISOString().split("T")[0];
+            const dateStr = comparisonEnabled ? startOfDay(date).getTime() : date.toISOString().split("T")[0];
             const gradeOnDate = allGrades.find(
-                (g) => new Date(g.passedAt).toISOString().split("T")[0] === dateStr
+                (g) => (comparisonEnabled
+                    ? startOfDay(new Date(g.passedAt)).getTime()
+                    : new Date(g.passedAt).toISOString().split("T")[0]) === dateStr
             );
 
             if (gradeOnDate) {
@@ -268,15 +301,24 @@ export default function SubjectGradesChart({
         const trendLine = showTrendLine
             ? calculateTrendLineData(baseChartData, "grade", { subdivisions: settings.trendLineSubdivisions })
             : baseChartData.map(() => null);
+        const referenceSeries = comparisonEnabled
+            ? comparison.getReferenceSeries(dates.map((date) => date.toISOString()), subjectId)
+            : [];
         const chartData = baseChartData.map((point, index) => ({
             ...point,
             trendLine: trendLine[index],
+            referenceAverage: referenceSeries[index]?.value ?? null,
+            referenceDate: referenceSeries[index]?.referenceDate ?? null,
         }));
 
         const chartConfig: ChartConfig = {
             grade: {
-                label: t("grades"),
+                label: comparisonEnabled ? currentLabel : t("grades"),
                 color: "var(--chart-1)",
+            },
+            referenceAverage: {
+                label: referenceLabel,
+                color: "var(--chart-2)",
             },
         };
 
@@ -284,15 +326,28 @@ export default function SubjectGradesChart({
             chartData,
             0,
             20,
-            ["grade", "trendLine"],
+            ["grade", "trendLine", "referenceAverage"],
             settings.autoZoomYAxis
         );
 
-        return { chartData, chartConfig, yAxisDomain, hasGrades };
+        return {
+            chartData,
+            chartConfig,
+            yAxisDomain,
+            hasGrades: comparisonEnabled ? baseChartData.some((point) => point.grade !== null) : allGrades.length > 0,
+            hasReferenceData: referenceSeries.some((point) => point.value !== null),
+        };
     }, [
+        comparisonEnabled,
+        comparison.currentYear,
+        comparison.getReferenceSeries,
+        comparison.scopeCurrentSubjects,
+        currentLabel,
+        referenceLabel,
         period,
         periods,
         settings.autoZoomYAxis,
+        settings.trendLineSubdivisions,
         showTrendLine,
         snapshotDate,
         subjectId,
@@ -301,7 +356,7 @@ export default function SubjectGradesChart({
         timelineEnabled,
     ]);
 
-    if (!hasGrades) {
+    if (!hasGrades && !hasReferenceData) {
         return (
             <Card className="p-4">
                 <div className="h-[400px] flex items-center justify-center text-muted-foreground">
@@ -313,6 +368,16 @@ export default function SubjectGradesChart({
 
     return (
         <Card className="p-4">
+            {comparisonEnabled && (
+                <div className="space-y-2 pb-4 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap gap-x-4 gap-y-2">
+                        <span className="flex items-center gap-2"><span aria-hidden="true" className="w-6 border-t-2 border-[var(--chart-1)]" />{currentLabel}</span>
+                        <span className="flex items-center gap-2"><span aria-hidden="true" className="w-6 border-t-2 border-dashed border-[var(--chart-2)]" />{referenceLabel}</span>
+                    </div>
+                    <p>{comparisonT("chartAlignment")}</p>
+                    {!hasReferenceData && <p>{comparisonT("noChartData")}</p>}
+                </div>
+            )}
             <ChartContainer config={chartConfig} className="h-[400px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={chartData} margin={{ left: -20 }}>
@@ -342,9 +407,23 @@ export default function SubjectGradesChart({
                                     label={label ? label.toString() : undefined}
                                     chartData={chartData}
                                     formatDates={formatDates}
+                                    currentLabel={comparisonEnabled ? currentLabel : undefined}
+                                    referenceLabel={comparisonEnabled ? referenceLabel : undefined}
                                 />
                             )}
                         />
+                        {comparisonEnabled && (
+                            <Line
+                                dataKey="referenceAverage"
+                                type="stepAfter"
+                                stroke="var(--chart-2)"
+                                strokeWidth={2}
+                                strokeDasharray="6 4"
+                                connectNulls={false}
+                                dot={false}
+                                activeDot={{ r: 4, fill: "var(--chart-2)", strokeWidth: 0 }}
+                            />
+                        )}
                         <Line
                             dataKey="grade"
                             type="monotone"

@@ -1,5 +1,8 @@
 "use client";
 
+import { ComparisonValue, type YearComparisonState } from "@/components/comparison/comparison-value";
+import { YearComparisonTableCells, YearComparisonTableHeaders } from "@/components/comparison/year-comparison-table";
+import { useYearComparison } from "@/hooks/use-year-comparison";
 import {
   Table,
   TableBody,
@@ -48,6 +51,8 @@ export default function GradesTable({
   caption?: string;
 }) {
   const pathname = usePathname();
+  const comparison = useYearComparison(periodId);
+  subjects = comparison.scopeCurrentSubjects(subjects);
   const t = useTranslations("Dashboard.Tables.GradesTable");
 
   const { activeId } = useActiveYearStore();
@@ -163,21 +168,21 @@ export default function GradesTable({
           <TableHead className="w-[50px] md:w-[200px]">
             {t("subjects")}
           </TableHead>
-          <TableHead className="w-[50px] md:w-[100px] text-center">
+          {comparison.active ? <YearComparisonTableHeaders comparison={comparison} /> : <TableHead className="w-[50px] md:w-[100px] text-center">
             {t("averages")}
-          </TableHead>
+          </TableHead>}
           <TableHead>{t("grades")}</TableHead>
         </TableRow>
       </TableHeader>
 
       <TableBody>
-        {renderSubjects(subjects, periodId, null, pathname, yearDefaultOutOf, customAverages, t)}
+        {renderSubjects(subjects, periodId, null, pathname, yearDefaultOutOf, customAverages, t, comparison)}
       </TableBody>
 
       <TableFooter>
         {/* Main Average */}
         <TableRow className="hidden md:table-row" id="general-average">
-          <TableCell className="font-semibold p-4" colSpan={2}>
+          <TableCell className="font-semibold p-4" colSpan={comparison.active ? 1 : 2}>
             <Link
               href={`/dashboard/subjects/general-average/${periodId}`}
               className={tableLinkClass}
@@ -193,9 +198,12 @@ export default function GradesTable({
               {t("overallAverage")}
             </Link>
           </TableCell>
-          <TableCell className="text-right font-semibold">
+          {comparison.active ? <>
+            <YearComparisonTableCells comparison={comparison} currentValue={overallAverageVal} outOf={yearDefaultOutOf} />
+            <TableCell />
+          </> : <TableCell className="text-right font-semibold">
             {overallAverage}
-          </TableCell>
+          </TableCell>}
         </TableRow>
         <TableRow className="md:hidden" id="general-average-mobile">
           <TableCell className="font-semibold text-center p-4" colSpan={3}>
@@ -214,6 +222,7 @@ export default function GradesTable({
               {t("overallAverage")}
             </Link>
             : {overallAverage}
+            <ComparisonValue comparison={comparison} currentValue={overallAverageVal} outOf={yearDefaultOutOf} className="justify-center" />
           </TableCell>
         </TableRow>
 
@@ -251,7 +260,7 @@ export default function GradesTable({
               return (
                 <React.Fragment key={ca.id}>
                   <TableRow className="hidden md:table-row" id={ca.id}>
-                    <TableCell className="font-semibold p-4" colSpan={2}>
+                    <TableCell className="font-semibold p-4" colSpan={comparison.active ? 1 : 2}>
                       <Link
                         href={`/dashboard/subjects/${ca.id}/${periodId}`}
                         onClick={() => {
@@ -267,9 +276,12 @@ export default function GradesTable({
                         {ca.name}
                       </Link>
                     </TableCell>
-                    <TableCell className="text-right font-semibold">
+                    {comparison.active ? <>
+                      <YearComparisonTableCells comparison={comparison} currentValue={customAvgVal} subjectId={ca.id} outOf={yearDefaultOutOf} />
+                      <TableCell />
+                    </> : <TableCell className="text-right font-semibold">
                       {customAvg}
-                    </TableCell>
+                    </TableCell>}
                   </TableRow>
                   <TableRow className="md:hidden" id={`${ca.id}-mobile`}>
                     <TableCell
@@ -291,6 +303,7 @@ export default function GradesTable({
                         {ca.name}
                       </Link>
                       : {customAvg}
+                      <ComparisonValue comparison={comparison} currentValue={customAvgVal} subjectId={ca.id} outOf={yearDefaultOutOf} className="justify-center" />
                     </TableCell>
                   </TableRow>
                 </React.Fragment>
@@ -359,6 +372,7 @@ function renderSubjects(
   yearDefaultOutOf: number,
   customAverages?: Average[],
   t?: any,
+  comparison?: YearComparisonState,
 ) {
   return subjects
     .filter((subject) => subject.parentId === parentId)
@@ -408,12 +422,13 @@ function renderSubjects(
               <div className="md:hidden mt-1 text-sm text-muted-foreground">
                 {t("average")}:{" "}
                 <span className="font-bold text-foreground">{subjAverage}</span>
+                {comparison && <ComparisonValue comparison={comparison} currentValue={subjAverageVal} subjectId={subject.id} outOf={yearDefaultOutOf} />}
               </div>
             </TableCell>
 
-            <TableCell className="text-center font-semibold hidden md:table-cell">
+            {comparison?.active ? <YearComparisonTableCells comparison={comparison} currentValue={subjAverageVal} subjectId={subject.id} outOf={yearDefaultOutOf} /> : <TableCell className="text-center font-semibold hidden md:table-cell">
               {subjAverage}
-            </TableCell>
+            </TableCell>}
 
             <TableCell className="hidden md:table-cell">
               <div className="flex gap-4 flex-wrap">
@@ -467,7 +482,8 @@ function renderSubjects(
             pathname,
             yearDefaultOutOf,
             customAverages,
-            t
+            t,
+            comparison
           )}
         </React.Fragment>
       );

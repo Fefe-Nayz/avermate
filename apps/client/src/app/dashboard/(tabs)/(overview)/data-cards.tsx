@@ -1,3 +1,5 @@
+import { ComparisonValue } from "@/components/comparison/comparison-value";
+import { useYearComparison } from "@/hooks/use-year-comparison";
 import DataCard from "@/components/dashboard/data-card";
 import GradeValue from "@/components/dashboard/grade-value";
 import { Period } from "@/types/period";
@@ -41,6 +43,8 @@ export default function DataCards({
   valueAnimationDelay?: number;
 }) {
   const t = useTranslations("Dashboard.Components.DataCards");
+  const comparison = useYearComparison(period.id);
+  subjects = comparison.scopeCurrentSubjects(subjects);
 
   const averages = useMemo(() => {
     console.time("Calculating averages overtime");
@@ -152,6 +156,7 @@ export default function DataCards({
             isAverage={true}
           />
         ) : null}
+        <ComparisonValue comparison={comparison} currentValue={average(undefined, subjects)} outOf={yearDefaultOutOf} />
       </DataCard>
 
       {/* 2) Main Custom Averages */}
@@ -261,6 +266,7 @@ export default function DataCards({
             delay={valueAnimationDelay}
           />
         )}
+        {bestSubject && <ComparisonValue comparison={comparison} currentValue={bestSubjectAverage} subjectId={bestSubject.id} outOf={yearDefaultOutOf} />}
       </DataCard>
 
       {/* 5) Worst Grade */}
@@ -310,6 +316,7 @@ export default function DataCards({
             delay={valueAnimationDelay}
           />
         )}
+        {worstSubject && <ComparisonValue comparison={comparison} currentValue={worstSubjectAverage} subjectId={worstSubject.id} outOf={yearDefaultOutOf} />}
       </DataCard>
     </div>
   );

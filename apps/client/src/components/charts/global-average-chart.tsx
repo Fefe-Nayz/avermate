@@ -16,6 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import { Period } from "@/types/period";
 import { Subject } from "@/types/subject";
 import { useTimelineModeState } from "@/hooks/use-timeline-mode";
+import { useYearComparison } from "@/hooks/use-year-comparison";
 import { average, averageOverTime } from "@/utils/average";
 import {
   calculateTrendLineData,
@@ -31,6 +32,7 @@ import {
   PolarAngleAxis,
   PolarGrid,
   PolarRadiusAxis,
+  Polygon,
   Radar,
   RadarChart,
   ReferenceDot,
@@ -47,6 +49,7 @@ import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
 import { GradeEmptyState } from "../empty-states/grade-empty-state";
 import { useChartSettings } from "@/hooks/use-chart-settings";
+import { startOfDay } from "date-fns";
 
 export interface TickProps {
   x?: number | string;
@@ -83,6 +86,37 @@ function getCumulativeStartDate(
 interface ChartDataPoint {
   date: string;
   average: number | null;
+  referenceAverage?: number | null;
+  referenceDate?: string | null;
+}
+
+// Recharts positions null radar values at the origin. Give Polygon an actual
+// gap instead, so an unmapped subject never looks like a zero average.
+function ComparisonRadarShape({
+  points = [],
+  ...style
+}: {
+  points?: Array<{ x: number; y: number; value?: number | null }>;
+  stroke?: string;
+  strokeWidth?: number | string;
+  strokeDasharray?: string;
+  fill?: string;
+  fillOpacity?: number;
+}) {
+  return (
+    <g>
+      <Polygon
+        {...style}
+        points={points.map((point) =>
+          point.value == null ? { x: NaN, y: NaN } : point
+        )}
+        connectNulls={false}
+      />
+      {points.map((point, index) => point.value == null ? null : (
+        <circle key={index} cx={point.x} cy={point.y} r={2.5} fill={style.stroke} />
+      ))}
+    </g>
+  );
 }
 
 function findNearestDatum(
@@ -108,11 +142,13 @@ function findNearestDatum(
   return nearestDatum;
 }
 
-function GlobalActiveDot({ chartData }: { chartData: ChartDataPoint[] }) {
+function GlobalActiveDot({ chartData, exactDate = false }: { chartData: ChartDataPoint[]; exactDate?: boolean }) {
   const activeLabel = useActiveTooltipLabel();
   if (!activeLabel) return null;
 
-  const nearestDatum = findNearestDatum(chartData, String(activeLabel));
+  const nearestDatum = exactDate
+    ? chartData.find((point) => point.date === String(activeLabel))
+    : findNearestDatum(chartData, String(activeLabel));
   if (!nearestDatum || nearestDatum.average === null) return null;
 
   return (
@@ -132,32 +168,49 @@ function CustomTooltipContent({
   label,
   chartData,
   formatDates,
+  currentLabel,
+  referenceLabel,
 }: {
   active?: boolean;
   label?: string;
   chartData: ChartDataPoint[];
   formatDates: ReturnType<typeof useFormatDates>;
+  currentLabel?: string;
+  referenceLabel?: string;
 }) {
-  const nearestDatum = label ? findNearestDatum(chartData, label) : undefined;
+  const selectedDatum = chartData.find((point) => point.date === label);
+  const nearestDatum = referenceLabel
+    ? selectedDatum
+    : label ? findNearestDatum(chartData, label) : undefined;
   const value = nearestDatum?.average ?? null;
+  const referenceValue = selectedDatum?.referenceAverage;
 
   return (
     <ChartTooltipContent
       active={active && !!label}
       label={label ? formatDates.formatShort(new Date(label)) : undefined}
-      payload={
-        value !== null
+      payload={[
+        ...(value !== null
           ? [
               {
-                name: "Global Average",
+                name: currentLabel ?? "Global Average",
                 value: value.toFixed(2),
                 color: "var(--chart-1)",
                 dataKey: "global-average",
                 payload: null,
               },
             ]
-          : []
-      }
+          : []),
+        ...(referenceLabel && referenceValue != null && selectedDatum?.referenceDate
+          ? [{
+              name: `${referenceLabel} · ${formatDates.formatIntermediate(new Date(`${selectedDatum.referenceDate}T12:00:00`))}`,
+              value: referenceValue.toFixed(2),
+              color: "var(--chart-2)",
+              dataKey: "referenceAverage",
+              payload: null,
+            }]
+          : []),
+      ]}
     />
   );
 }
@@ -175,16 +228,29 @@ export default function GlobalAverageChart({
 }) {
   const formatter = useFormatter();
   const t = useTranslations("Dashboard.Charts.GlobalAverageChart");
+  const comparisonT = useTranslations("YearComparison");
   const formatDates = useFormatDates(formatter);
   const { settings, isLoaded } = useChartSettings();
   const showTrendLine = isLoaded && settings.showTrendLine;
   const { isActive: timelineEnabled, snapshotDate } = useTimelineModeState();
+  const comparison = useYearComparison(period.id);
+  const comparisonEnabled = comparison.active && comparison.ready && comparison.currentYear?.id === yearId;
+  const currentLabel = comparison.currentYear?.name ?? t("average");
+  const referenceLabel = comparison.referenceYear?.name ?? "";
+  const chartPeriod = comparisonEnabled && period.id === "full-year" && comparison.currentYear
+    ? { ...period, startAt: comparison.currentYear.startDate, endAt: comparison.currentYear.endDate }
+    : period;
 
   // Calculate the start and end dates
-  const endDate = getVisibleChartEndDate(new Date(period.endAt), {
+  const visibleEndDate = getVisibleChartEndDate(new Date(chartPeriod.endAt), {
     snapshotDate: timelineEnabled ? snapshotDate : null,
   });
-  const startDate = getCumulativeStartDate(periods, period);
+  const endDate = comparisonEnabled ? startOfDay(visibleEndDate) : visibleEndDate;
+  const periodStartDate = getCumulativeStartDate(periods, chartPeriod);
+  const startDate = comparisonEnabled ? startOfDay(periodStartDate) : periodStartDate;
+  const chartSubjects = comparisonEnabled
+    ? comparison.scopeCurrentSubjects(subjects)
+    : subjects;
 
   // Generate an array of dates
   const dates: Date[] = [];
@@ -197,12 +263,22 @@ export default function GlobalAverageChart({
   }
 
   // Calculate the average grades over time
-  const averages = averageOverTime(subjects, undefined, period, periods);
+  const averages = averageOverTime(chartSubjects, undefined, chartPeriod, periods);
 
-  const baseChartData = dates.map((date, index) => ({
-    date: date.toISOString(),
-    average: averages[index],
-  }));
+  const referenceSeries = comparisonEnabled
+    ? comparison.getReferenceSeries(dates.map((date) => date.toISOString()))
+    : [];
+  let currentAverage: number | null = null;
+  const baseChartData = dates.map((date, index) => {
+    currentAverage = averages[index] ?? currentAverage;
+    return {
+      date: date.toISOString(),
+      average: comparisonEnabled ? currentAverage : averages[index],
+      referenceAverage: referenceSeries[index]?.value ?? null,
+      referenceDate: referenceSeries[index]?.referenceDate ?? null,
+    };
+  });
+  const hasReferenceData = referenceSeries.some((point) => point.value !== null);
 
   const trendLine = showTrendLine
     ? calculateTrendLineData(baseChartData, "average", { subdivisions: settings.trendLineSubdivisions })
@@ -214,8 +290,12 @@ export default function GlobalAverageChart({
 
   const chartConfig = {
     average: {
-      label: t("average"),
+      label: comparisonEnabled ? currentLabel : t("average"),
       color: "var(--chart-1)",
+    },
+    referenceAverage: {
+      label: referenceLabel,
+      color: "var(--chart-2)",
     },
   };
 
@@ -224,19 +304,19 @@ export default function GlobalAverageChart({
     chartData,
     0,
     20,
-    ["average", "trendLine"],
+    ["average", "trendLine", "referenceAverage"],
     settings.autoZoomYAxis
   );
 
   // Calculate average grades per subject for radar chart
-  const subjectAverages = subjects
+  const subjectAverages = chartSubjects
     .filter((subject) => subject.isMainSubject)
     .map((subject) => {
-      const averageGrade = average(subject.id, subjects);
-      const validAverage = averageGrade ?? 0;
+      const averageGrade = average(subject.id, chartSubjects);
       return {
         subject: subject.name,
-        average: validAverage,
+        average: comparisonEnabled ? averageGrade : averageGrade ?? 0,
+        referenceAverage: comparisonEnabled ? comparison.getReferenceAverage(subject.id) : null,
         fullMark: 20,
       };
     });
@@ -298,7 +378,7 @@ export default function GlobalAverageChart({
   }
 
   // If all the averages are null
-  if (chartData.every((data) => data.average === null)) {
+  if (chartData.every((data) => data.average === null) && !hasReferenceData) {
     return <GradeEmptyState className="col-span-full" yearId={yearId} />;
   }
 
@@ -306,6 +386,16 @@ export default function GlobalAverageChart({
     <Card className="lg:col-span-5">
       <CardHeader>
         <CardTitle>{t("globalAverageTitle")}</CardTitle>
+        {comparisonEnabled && (
+          <div className="space-y-2 pt-2 text-xs text-muted-foreground">
+            <div className="flex flex-wrap gap-x-4 gap-y-2">
+              <span className="flex items-center gap-2"><span aria-hidden="true" className="w-6 border-t-2 border-[var(--chart-1)]" />{currentLabel}</span>
+              <span className="flex items-center gap-2"><span aria-hidden="true" className="w-6 border-t-2 border-dashed border-[var(--chart-2)]" />{referenceLabel}</span>
+            </div>
+            <p>{comparisonT("chartAlignment")}</p>
+            {!hasReferenceData && <p>{comparisonT("noChartData")}</p>}
+          </div>
+        )}
       </CardHeader>
 
       <CardContent>
@@ -342,12 +432,14 @@ export default function GlobalAverageChart({
                       label={label ? label.toString() : undefined}
                       chartData={chartData}
                       formatDates={formatDates}
+                      currentLabel={comparisonEnabled ? currentLabel : undefined}
+                      referenceLabel={comparisonEnabled ? referenceLabel : undefined}
                     />
                   )}
                 />
                 <Area
                   dataKey="average"
-                  type="monotone"
+                  type={comparisonEnabled ? "stepAfter" : "monotone"}
                   fill="var(--chart-1)"
                   stroke="var(--chart-1)"
                   fillOpacity={0.1}
@@ -356,6 +448,18 @@ export default function GlobalAverageChart({
                   dot={false}
                   activeDot={false}
                 />
+                {comparisonEnabled && (
+                  <Line
+                    dataKey="referenceAverage"
+                    type="stepAfter"
+                    stroke="var(--chart-2)"
+                    strokeWidth={2}
+                    strokeDasharray="6 4"
+                    connectNulls={false}
+                    dot={false}
+                    activeDot={{ r: 4, fill: "var(--chart-2)", strokeWidth: 0 }}
+                  />
+                )}
                 {showTrendLine ? (
                   <Line
                     dataKey="trendLine"
@@ -368,7 +472,7 @@ export default function GlobalAverageChart({
                     activeDot={false}
                   />
                 ) : null}
-                <GlobalActiveDot chartData={chartData} />
+                <GlobalActiveDot chartData={chartData} exactDate={comparisonEnabled} />
               </AreaChart>
             </ChartContainer>
           </div>
@@ -389,13 +493,48 @@ export default function GlobalAverageChart({
                 <PolarAngleAxis dataKey="subject" tick={renderPolarAngleAxis} />
                 <Radar
                   dataKey="average"
+                  name={comparisonEnabled ? currentLabel : undefined}
+                  shape={comparisonEnabled ? <ComparisonRadarShape /> : undefined}
+                  activeDot={comparisonEnabled ? false : undefined}
                   fillOpacity={0.1}
                   stroke="var(--chart-1)"
                   fill="var(--chart-1)"
                   strokeWidth={2}
                 />
+                {comparisonEnabled && (
+                  <Radar
+                    dataKey="referenceAverage"
+                    name={referenceLabel}
+                    shape={<ComparisonRadarShape />}
+                    activeDot={false}
+                    fillOpacity={0}
+                    stroke="var(--chart-2)"
+                    fill="var(--chart-2)"
+                    strokeWidth={2}
+                    strokeDasharray="6 4"
+                    connectNulls={false}
+                  />
+                )}
                 <PolarRadiusAxis domain={[0, 20]} stroke="#a1a1aa" />
-                <ChartTooltip content={<ChartTooltipContent />} />
+                <ChartTooltip
+                  content={comparisonEnabled
+                    ? ({ active, label, payload }) => (
+                        <ChartTooltipContent
+                          active={active}
+                          label={label == null ? undefined : String(label)}
+                          payload={payload?.filter((item) => item.value != null).map((item) => ({
+                            name: item.dataKey === "referenceAverage" && comparison.referenceCutoffDate
+                              ? `${referenceLabel} · ${formatDates.formatIntermediate(new Date(`${comparison.referenceCutoffDate}T12:00:00`))}`
+                              : currentLabel,
+                            dataKey: String(item.dataKey),
+                            value: Number(item.value).toFixed(2),
+                            color: item.dataKey === "referenceAverage" ? "var(--chart-2)" : "var(--chart-1)",
+                            payload: null,
+                          }))}
+                        />
+                      )
+                    : <ChartTooltipContent />}
+                />
               </RadarChart>
             </ChartContainer>
           </div>

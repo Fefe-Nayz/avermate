@@ -1,5 +1,7 @@
 "use client";
 
+import { ComparisonValue } from "@/components/comparison/comparison-value";
+import { useYearComparison } from "@/hooks/use-year-comparison";
 import { DifferenceBadge } from "@/app/dashboard/(details)/grades/[gradeId]/difference-badge";
 import SubjectMoreButton from "@/components/buttons/dashboard/subject/subject-more-button";
 import DataCard from "@/components/dashboard/data-card";
@@ -100,6 +102,8 @@ function SubjectWrapper({
   timelineControl?: React.ReactNode;
 }) {
   const t = useTranslations("Dashboard.Pages.SubjectWrapper");
+  const comparison = useYearComparison(period.id, subject.id);
+  subjects = comparison.scopeCurrentSubjects(subjects);
 
   const { activeId } = useActiveYearStore();
   const { data: years } = useYears();
@@ -155,6 +159,8 @@ function SubjectWrapper({
   }
 
   const isGradePresent = hasGrades(subject.id);
+  const currentAverage = average(subject.id, subjects);
+  const hasReferenceAverage = comparison.ready && comparison.getReferenceAverage(subject.id) !== null;
 
   function get4xlColsClass(cardCount: number) {
     switch (cardCount) {
@@ -175,7 +181,7 @@ function SubjectWrapper({
     }
   }
 
-  if (!isGradePresent) {
+  if (!isGradePresent && !hasReferenceAverage) {
     return (
       <div className="flex flex-col gap-4 md:gap-8 mx-auto max-w-[2000px]">
         {/* Back Button */}
@@ -336,11 +342,16 @@ function SubjectWrapper({
           })}
           icon={AcademicCapIcon}
         >
-          <GradeValue
-            value={(average(subject?.id, subjects) || 0) * 100}
-            outOf={yearDefaultOutOf}
-            isAverage={true}
-          />
+          {currentAverage !== null ? (
+            <GradeValue
+              value={currentAverage * 100}
+              outOf={yearDefaultOutOf}
+              isAverage={true}
+            />
+          ) : (
+            <p className="text-xl font-bold md:text-3xl">{t("notAvailable")}</p>
+          )}
+          <ComparisonValue comparison={comparison} currentValue={currentAverage} subjectId={subject.id} outOf={yearDefaultOutOf} />
         </DataCard>
 
         {/* Coefficient */}
@@ -410,6 +421,7 @@ function SubjectWrapper({
       </div>
 
       {/* Impact Cards Section */}
+      {isGradePresent && (
       <div className="space-y-2">
         <h3 className="text-lg font-medium text-muted-foreground">
           {t("impactSectionTitle")}
@@ -508,6 +520,7 @@ function SubjectWrapper({
           ))}
         </div>
       </div>
+      )}
 
       <Separator />
 

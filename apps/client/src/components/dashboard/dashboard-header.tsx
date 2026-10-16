@@ -4,6 +4,7 @@ import * as React from "react";
 import AccountDropdown from "@/components/buttons/account/account-dropdown";
 import Logo from "@/components/logo";
 import YearWorkspaceSelect from "../selects/year-workspace-select";
+import YearComparisonControl from "@/components/comparison/year-comparison-control";
 import { useScrollDirection } from "@/hooks/use-scroll-direction";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePathname, useParams } from "next/navigation";
@@ -12,6 +13,8 @@ import { cn } from "@/lib/utils";
 import { BodyPortal } from "@/components/portal/body-portal";
 import { useGrade } from "@/hooks/use-grade";
 import { useSubject } from "@/hooks/use-subject";
+import { useCustomAverages } from "@/hooks/use-custom-averages";
+import { useActiveYearStore } from "@/stores/active-year-store";
 import { Grade } from "@/types/grade";
 import { Subject } from "@/types/subject";
 
@@ -23,7 +26,7 @@ const getPageTitle = (
   pathname: string,
   t: any,
   grade?: Grade | null,
-  subject?: Subject | null
+  subject?: Pick<Subject, "name"> | null
 ) => {
   if (pathname === "/dashboard") {
     return t("Dashboard.Pages.OverviewPage.overviewTitle");
@@ -93,13 +96,21 @@ export default function DashboardHeader({
 
   const gradeId = params?.gradeId as string | undefined;
   const subjectId = params?.subjectId as string | undefined;
+  const activeYearId = useActiveYearStore((state) => state.activeId);
+  const isCustomAverage = subjectId?.startsWith("ca") ?? false;
+  const isVirtualSubject = isCustomAverage || subjectId === "general-average";
 
   // Get grade and subject data (hooks handle undefined IDs gracefully)
   const gradeQuery = useGrade(gradeId);
-  const subjectQuery = useSubject(subjectId, false);
+  const subjectQuery = useSubject(subjectId, isVirtualSubject);
+  const customAveragesQuery = useCustomAverages(isCustomAverage ? activeYearId : "");
 
   const grade = gradeQuery?.data;
-  const subject = subjectQuery?.data;
+  const subject = subjectId === "general-average"
+    ? { name: t("Dashboard.Pages.SubjectWrapper.generalAverage") }
+    : isCustomAverage
+      ? customAveragesQuery.data?.find((average) => average.id === subjectId)
+      : subjectQuery.data;
 
   // Header scroll behavior only on mobile
   const isCompact = isMobile && scrollDirection === "down";
@@ -152,13 +163,14 @@ export default function DashboardHeader({
             {!hideWorkspaces && (
               <div
                 className={cn(
-                  "transition-all duration-300",
+                  "flex items-center gap-1 transition-all duration-300",
                   isCompact
                     ? "w-0 overflow-hidden opacity-0 pointer-events-none"
                     : "w-auto overflow-visible opacity-100"
                 )}
               >
                 <YearWorkspaceSelect />
+                <YearComparisonControl />
               </div>
             )}
             <AccountDropdown />
