@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { createClient, type Client } from "@libsql/client";
@@ -55,6 +56,16 @@ describe("year comparison API", () => {
       { id: "term-older", yearId: "older", userId: "owner" },
       { id: "term-foreign", yearId: "foreign", userId: "other" },
     ].map((period) => ({ ...period, name: period.id, startAt: now, endAt: now, createdAt: now })));
+    await database.insert(schema.customAverages).values([
+      { id: "custom-current", yearId: "current", userId: "owner" },
+      { id: "custom2-current", yearId: "current", userId: "owner" },
+      { id: "custom-reference", yearId: "reference", userId: "owner" },
+      { id: "custom2-reference", yearId: "reference", userId: "owner" },
+      { id: "custom-older", yearId: "older", userId: "owner" },
+      { id: "custom-foreign", yearId: "foreign", userId: "other" },
+      { id: "custom-inconsistent-source", yearId: "current", userId: "other" },
+      { id: "custom-inconsistent-reference", yearId: "reference", userId: "other" },
+    ].map((customAverage) => ({ ...customAverage, name: customAverage.id, subjects: "[]", createdAt: now })));
   });
 
   afterEach(() => client?.close());
@@ -111,6 +122,7 @@ describe("year comparison API", () => {
     const data = await saved.json();
     assert.deepEqual(data.comparison.subjectMap, validMaps.subjectMap);
     assert.deepEqual(data.comparison.periodMap, validMaps.periodMap);
+    assert.deepEqual(data.comparison.customAverageMap, {});
     assert.ok(Number.isFinite(Date.parse(data.comparison.updatedAt)));
     assert.deepEqual(await (await app().request("/comparisons/current/reference")).json(), data);
     assert.equal((await put({
@@ -166,6 +178,97 @@ describe("year comparison API", () => {
     const saved = await (await app().request("/comparisons/current/reference")).json();
     assert.deepEqual(saved.comparison.subjectMap, { "math-current": null });
     assert.deepEqual(saved.comparison.periodMap, { "term-current": null });
+  });
+
+  it("persists custom average mappings and explicit exclusions independently for each pair", async () => {
+    const customAverageMap = { "custom-current": "custom-reference", "custom2-current": null };
+    const saved = await put({ ...validMaps, customAverageMap });
+    assert.equal(saved.status, 200);
+    assert.deepEqual((await saved.json()).comparison.customAverageMap, customAverageMap);
+    assert.deepEqual((await (await app().request("/comparisons/current/reference")).json()).comparison.customAverageMap, customAverageMap);
+    const otherPair = await put({ subjectMap: {}, periodMap: {}, customAverageMap: { "custom-current": "custom-older" } }, "current/older");
+    assert.equal(otherPair.status, 200);
+    assert.deepEqual((await (await app().request("/comparisons/current/reference")).json()).comparison.customAverageMap, customAverageMap);
+    assert.deepEqual((await otherPair.json()).comparison.customAverageMap, { "custom-current": "custom-older" });
+  });
+
+  it("preserves custom average mappings for old callers and clears them only when explicitly requested", async () => {
+    const initial = await put();
+    assert.deepEqual((await initial.json()).comparison.customAverageMap, {});
+    const customAverageMap = { "custom-current": "custom-reference", "custom2-current": null };
+    assert.equal((await put({ ...validMaps, customAverageMap })).status, 200);
+    const legacyUpdate = await put({ subjectMap: {}, periodMap: {} });
+    assert.equal(legacyUpdate.status, 200);
+    assert.deepEqual((await legacyUpdate.json()).comparison.customAverageMap, customAverageMap);
+    const row = await database.query.yearComparisons.findFirst();
+    assert.deepEqual(JSON.parse(row!.customAverageMap), customAverageMap);
+    assert.deepEqual((await (await put({ ...validMaps, customAverageMap: {} })).json()).comparison.customAverageMap, {});
+    assert.deepEqual((await (await app().request("/comparisons/current/reference")).json()).comparison.customAverageMap, {});
+  });
+
+  it("validates custom average ownership and exact source/reference year membership without overwriting the saved map", async () => {
+    const customAverageMap = { "custom-current": "custom-reference" };
+    await put({ ...validMaps, customAverageMap });
+    for (const invalid of [
+      { "custom-current": "custom-foreign" },
+      { "custom-foreign": null },
+      { "custom-current": "custom-older" },
+      { "custom-older": null },
+      { "custom-reference": "custom-current" },
+      { "custom-current": "custom-current" },
+      { "custom-current": "custom-inconsistent-reference" },
+      { "custom-inconsistent-source": null },
+      { "math-current": "math-reference" },
+      { missing: null },
+    ]) {
+      const response = await put({ ...validMaps, customAverageMap: invalid });
+      assert.equal(response.status, 400);
+      assert.deepEqual(await response.json(), { code: "INVALID_CUSTOM_AVERAGE_MAPPING" });
+    }
+    const saved = await (await app().request("/comparisons/current/reference")).json();
+    assert.deepEqual(saved.comparison.customAverageMap, customAverageMap);
+  });
+
+  it("rejects duplicate custom average references and accepts multiple null exclusions", async () => {
+    assert.equal((await put({ ...validMaps, customAverageMap: { "custom-current": "custom-reference", "custom2-current": "custom-reference" } })).status, 400);
+    assert.equal((await put({ ...validMaps, customAverageMap: null })).status, 400);
+    assert.equal((await put({ ...validMaps, customAverageMap: { "custom-current": null, "custom2-current": null } })).status, 200);
+  });
+
+  it("clears deleted custom average references and drops deleted sources, including when an old client saves", async () => {
+    await put({ ...validMaps, customAverageMap: { "custom-current": "custom-reference", "custom2-current": "custom2-reference" } });
+    await database.delete(schema.customAverages).where(eq(schema.customAverages.id, "custom-reference"));
+    await database.delete(schema.customAverages).where(eq(schema.customAverages.id, "custom2-current"));
+    const saved = await (await app().request("/comparisons/current/reference")).json();
+    assert.deepEqual(saved.comparison.customAverageMap, { "custom-current": null });
+    const legacyUpdate = await put();
+    assert.equal(legacyUpdate.status, 200);
+    assert.deepEqual((await legacyUpdate.json()).comparison.customAverageMap, { "custom-current": null });
+  });
+
+  it("adds the custom average map to existing comparison rows without changing their saved mappings", async () => {
+    const upgradeClient = createClient({ url: "file::memory:" });
+    try {
+      await upgradeClient.executeMultiple("CREATE TABLE users (id TEXT PRIMARY KEY); CREATE TABLE years (id TEXT PRIMARY KEY);");
+      await upgradeClient.executeMultiple("INSERT INTO users (id) VALUES ('owner'); INSERT INTO years (id) VALUES ('current'),('reference');");
+      const oldMigration = await readFile(new URL("../../drizzle/0006_year_comparisons.sql", import.meta.url), "utf8");
+      await upgradeClient.executeMultiple(oldMigration);
+      await upgradeClient.execute({
+        sql: "INSERT INTO year_comparisons (user_id,year_id,reference_year_id,subject_map,period_map,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+        args: ["owner", "current", "reference", JSON.stringify(validMaps.subjectMap), JSON.stringify(validMaps.periodMap), 100, 200],
+      });
+      const migration = await readFile(new URL("../../drizzle/0007_year_comparison_custom_averages.sql", import.meta.url), "utf8");
+      await upgradeClient.executeMultiple(migration);
+      const result = await upgradeClient.execute("SELECT * FROM year_comparisons");
+      assert.equal(result.rows.length, 1);
+      assert.equal(result.rows[0].custom_average_map, "{}");
+      assert.equal(result.rows[0].subject_map, JSON.stringify(validMaps.subjectMap));
+      assert.equal(result.rows[0].period_map, JSON.stringify(validMaps.periodMap));
+      assert.equal(result.rows[0].created_at, 100);
+      assert.equal(result.rows[0].updated_at, 200);
+    } finally {
+      upgradeClient.close();
+    }
   });
 
   it("removes stored mappings when either year or its account is deleted", async () => {

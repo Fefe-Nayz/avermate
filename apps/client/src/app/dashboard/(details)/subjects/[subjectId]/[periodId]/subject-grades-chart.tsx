@@ -210,7 +210,7 @@ export default function SubjectGradesChart({
     const showTrendLine = isLoaded && settings.showTrendLine;
     const { isActive: timelineEnabled, snapshotDate } = useTimelineModeState();
     const comparison = useYearComparison(period.id, subjectId);
-    const comparisonEnabled = comparison.active && comparison.ready && !subjectId.startsWith("ca");
+    const comparisonEnabled = comparison.active && comparison.ready;
     const currentLabel = comparison.currentYear?.name ?? t("grades");
     const referenceLabel = comparisonT("referenceAverage", { year: comparison.referenceYear?.name ?? "" });
 

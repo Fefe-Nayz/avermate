@@ -1,5 +1,5 @@
 import type { db } from "@/db";
-import { periods, subjects, yearComparisons, years } from "@/db/schema";
+import { customAverages, periods, subjects, yearComparisons, years } from "@/db/schema";
 import type { Session, User } from "@/lib/auth";
 import { zValidator } from "@hono/zod-validator";
 import { and, eq, inArray } from "drizzle-orm";
@@ -26,6 +26,8 @@ const mappingSchema = z.record(idSchema, idSchema.nullable())
 const updateSchema = z.object({
   subjectMap: mappingSchema,
   periodMap: mappingSchema,
+  // Older clients must not erase a mapping they do not know about.
+  customAverageMap: mappingSchema.optional(),
 }).strict();
 
 type Mapping = Record<string, string | null>;
@@ -36,7 +38,7 @@ function isValidMapping(map: Mapping, sourceIds: Set<string>, referenceIds: Set<
   );
 }
 
-// Subjects/periods can be removed after configuration. Keep explicit exclusions,
+// Academic items can be removed after configuration. Keep explicit exclusions,
 // discard removed sources and clear references that no longer exist.
 function readMapping(serialized: string, sourceIds: Set<string>, referenceIds: Set<string>): Mapping {
   let parsed: unknown;
@@ -80,12 +82,15 @@ export function createComparisonsRoutes(database: typeof db) {
   }
 
   async function getMappingIds(userId: string, yearId: string, referenceYearId: string) {
-    const [pairSubjects, pairPeriods] = await Promise.all([
+    const [pairSubjects, pairPeriods, pairCustomAverages] = await Promise.all([
       database.select({ id: subjects.id, yearId: subjects.yearId }).from(subjects).where(and(
         eq(subjects.userId, userId), inArray(subjects.yearId, [yearId, referenceYearId]),
       )),
       database.select({ id: periods.id, yearId: periods.yearId }).from(periods).where(and(
         eq(periods.userId, userId), inArray(periods.yearId, [yearId, referenceYearId]),
+      )),
+      database.select({ id: customAverages.id, yearId: customAverages.yearId }).from(customAverages).where(and(
+        eq(customAverages.userId, userId), inArray(customAverages.yearId, [yearId, referenceYearId]),
       )),
     ]);
     return {
@@ -93,6 +98,8 @@ export function createComparisonsRoutes(database: typeof db) {
       referenceSubjects: new Set(pairSubjects.filter((s) => s.yearId === referenceYearId).map((s) => s.id)),
       sourcePeriods: new Set(pairPeriods.filter((p) => p.yearId === yearId).map((p) => p.id)),
       referencePeriods: new Set(pairPeriods.filter((p) => p.yearId === referenceYearId).map((p) => p.id)),
+      sourceCustomAverages: new Set(pairCustomAverages.filter((a) => a.yearId === yearId).map((a) => a.id)),
+      referenceCustomAverages: new Set(pairCustomAverages.filter((a) => a.yearId === referenceYearId).map((a) => a.id)),
     };
   }
 
@@ -114,6 +121,7 @@ export function createComparisonsRoutes(database: typeof db) {
       referenceYearId,
       subjectMap: readMapping(row.subjectMap, ids.sourceSubjects, ids.referenceSubjects),
       periodMap: readMapping(row.periodMap, ids.sourcePeriods, ids.referencePeriods),
+      customAverageMap: readMapping(row.customAverageMap, ids.sourceCustomAverages, ids.referenceCustomAverages),
       updatedAt: row.updatedAt.toISOString(),
     } });
   });
@@ -122,7 +130,7 @@ export function createComparisonsRoutes(database: typeof db) {
     zValidator("json", updateSchema), async (c) => {
       const userId = c.get("session")!.user.id;
       const { yearId, referenceYearId } = c.req.valid("param");
-      const { subjectMap, periodMap } = c.req.valid("json");
+      const { subjectMap, periodMap, customAverageMap } = c.req.valid("json");
       if (!await getOwnedPair(userId, yearId, referenceYearId)) {
         return c.json({ code: "YEAR_NOT_FOUND" }, 404);
       }
@@ -133,9 +141,15 @@ export function createComparisonsRoutes(database: typeof db) {
       if (!isValidMapping(periodMap, ids.sourcePeriods, ids.referencePeriods)) {
         return c.json({ code: "INVALID_PERIOD_MAPPING" }, 400);
       }
+      if (customAverageMap !== undefined && !isValidMapping(customAverageMap, ids.sourceCustomAverages, ids.referenceCustomAverages)) {
+        return c.json({ code: "INVALID_CUSTOM_AVERAGE_MAPPING" }, 400);
+      }
       const values = {
         subjectMap: JSON.stringify(subjectMap),
         periodMap: JSON.stringify(periodMap),
+        // Omit from the upsert update too: preserving this at SQL level avoids
+        // overwriting a concurrent custom-average edit made by a newer client.
+        ...(customAverageMap !== undefined ? { customAverageMap: JSON.stringify(customAverageMap) } : {}),
         updatedAt: new Date(),
       };
       const row = await database.insert(yearComparisons).values({
@@ -145,7 +159,9 @@ export function createComparisonsRoutes(database: typeof db) {
         set: values,
       }).returning().get();
       return c.json({ comparison: {
-        yearId, referenceYearId, subjectMap, periodMap, updatedAt: row.updatedAt.toISOString(),
+        yearId, referenceYearId, subjectMap, periodMap,
+        customAverageMap: readMapping(row.customAverageMap, ids.sourceCustomAverages, ids.referenceCustomAverages),
+        updatedAt: row.updatedAt.toISOString(),
       } });
     });
 

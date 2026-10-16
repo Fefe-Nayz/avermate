@@ -1,8 +1,9 @@
 import type { Period } from "@/types/period";
 import type { Subject } from "@/types/subject";
 import type { Year } from "@/types/year";
+import type { Average } from "@/types/average";
 import type { YearComparisonMap, YearComparisonScope, YearComparisonSeriesPoint } from "@/types/year-comparison";
-import { average } from "./average";
+import { addGeneralAverageToSubjects, average } from "./average";
 
 const DAY = 86_400_000;
 
@@ -80,6 +81,10 @@ export function suggestPeriodMap(source: Period[], reference: Period[]): YearCom
   return matches;
 }
 
+export function suggestCustomAverageMap(source: Average[], reference: Average[]): YearComparisonMap {
+  return uniqueMatches(source, reference, (entry) => normalizeComparisonName(entry.name));
+}
+
 /** Deleted subjects/periods must not leave invisible IDs in editable saved mappings. */
 export function sanitizeComparisonMap(
   mappings: YearComparisonMap,
@@ -152,6 +157,9 @@ type ComparisonEngineInput = {
   referenceSubjects: Subject[];
   subjectMap: YearComparisonMap;
   periodMap: YearComparisonMap;
+  customAverageMap?: YearComparisonMap;
+  sourceCustomAverages?: Average[];
+  referenceCustomAverages?: Average[];
   periodId?: string;
   scope?: YearComparisonScope;
   /** Timeline snapshot, or now when the timeline is disabled. */
@@ -173,8 +181,24 @@ export function createYearComparison(input: ComparisonEngineInput) {
   const ready = !!sourceRange && !!referenceRange && Number.isFinite(referenceCutoff);
   const filtered = ready && elapsed >= 0
     ? filterComparisonSubjects(input.referenceSubjects, referenceRange!, referenceCutoff) : [];
+  const sourceCustomAverages = new Map((input.sourceCustomAverages ?? []).map((entry) => [entry.id, entry]));
+  const referenceCustomAverages = new Map((input.referenceCustomAverages ?? []).map((entry) => [entry.id, entry]));
   const resolveSubject = (subjectId?: string) => isGeneralComparisonSubject(subjectId) ? undefined : input.subjectMap[subjectId!] ?? undefined;
-  const hasSubject = (subjectId?: string) => isGeneralComparisonSubject(subjectId) || !!resolveSubject(subjectId);
+  const resolveCustomAverage = (subjectId?: string) => {
+    if (!subjectId || !sourceCustomAverages.has(subjectId)) return undefined;
+    const referenceId = input.customAverageMap?.[subjectId];
+    return referenceId ? referenceCustomAverages.get(referenceId) : undefined;
+  };
+  const hasSubject = (subjectId?: string) => isGeneralComparisonSubject(subjectId)
+    || (sourceCustomAverages.has(subjectId!) ? !!resolveCustomAverage(subjectId) : !!resolveSubject(subjectId));
+  const computeReferenceAverage = (subjects: Subject[], subjectId?: string) => {
+    const customAverage = resolveCustomAverage(subjectId);
+    // Apply the reference year's own formula after filtering its grades. This is the
+    // same virtual-subject calculation used by the existing custom-average screens.
+    return customAverage
+      ? average(customAverage.id, addGeneralAverageToSubjects(subjects, customAverage))
+      : average(resolveSubject(subjectId), subjects);
+  };
   return {
     ready, sourceRange, referenceRange, referenceSubjects: filtered,
     referencePeriod: referenceRange?.period,
@@ -186,7 +210,7 @@ export function createYearComparison(input: ComparisonEngineInput) {
     },
     getReferenceAverage(subjectId?: string): number | null {
       if (!ready || !hasSubject(subjectId) || elapsed < 0) return null;
-      return average(resolveSubject(subjectId), filtered);
+      return computeReferenceAverage(filtered, subjectId);
     },
     getReferenceSeries(dates: string[], subjectId?: string): YearComparisonSeriesPoint[] {
       const cache = new Map<number, number | null>();
@@ -199,7 +223,7 @@ export function createYearComparison(input: ComparisonEngineInput) {
           return { date, referenceDate, value: null };
         }
         if (!cache.has(referenceDay)) {
-          cache.set(referenceDay, average(resolveSubject(subjectId), filterComparisonSubjects(input.referenceSubjects, referenceRange!, referenceDay)));
+          cache.set(referenceDay, computeReferenceAverage(filterComparisonSubjects(input.referenceSubjects, referenceRange!, referenceDay), subjectId));
         }
         return { date, referenceDate, value: cache.get(referenceDay) ?? null };
       });

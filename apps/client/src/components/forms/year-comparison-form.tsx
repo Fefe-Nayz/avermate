@@ -50,6 +50,7 @@ export default function YearComparisonForm({ close, onSavingChange }: {
       scope: initial.scope,
       subjectMap: {},
       periodMap: {},
+      customAverageMap: {},
     },
   });
   const referenceYearId = form.watch("referenceYearId");
@@ -62,6 +63,7 @@ export default function YearComparisonForm({ close, onSavingChange }: {
   const saving = form.formState.isSubmitting;
   const subjectMap = form.watch("subjectMap");
   const periodMap = form.watch("periodMap");
+  const customAverageMap = form.watch("customAverageMap");
   const scope = form.watch("scope");
 
   // Initialize each selected pair once; background refetches must preserve edits.
@@ -70,9 +72,10 @@ export default function YearComparisonForm({ close, onSavingChange }: {
     const draft = drafts.current.get(pair);
     form.setValue("subjectMap", draft?.subjectMap ?? settings.subjectMap);
     form.setValue("periodMap", draft?.periodMap ?? settings.periodMap);
+    form.setValue("customAverageMap", draft?.customAverageMap ?? settings.customAverageMap);
     setSearch("");
     setLoadedPair(pair);
-  }, [settings.loading, settings.error, settings.referenceYear, settings.subjectMap, settings.periodMap, loadedPair, pair, form]);
+  }, [settings.loading, settings.error, settings.referenceYear, settings.subjectMap, settings.periodMap, settings.customAverageMap, loadedPair, pair, form]);
 
   const sourceSubjects = [...settings.sourceSubjects].sort((a, b) =>
     subjectPath(a, settings.sourceSubjects).localeCompare(subjectPath(b, settings.sourceSubjects)));
@@ -80,6 +83,9 @@ export default function YearComparisonForm({ close, onSavingChange }: {
     subjectPath(a, settings.referenceSubjects).localeCompare(subjectPath(b, settings.referenceSubjects)));
   const matchedSubjects = sourceSubjects.filter((subject) => !!subjectMap[subject.id]).length;
   const matchedPeriods = settings.sourcePeriods.filter((period) => !!periodMap[period.id]).length;
+  const sourceCustomAverages = [...settings.sourceCustomAverages].sort((a, b) => a.name.localeCompare(b.name));
+  const referenceCustomAverages = [...settings.referenceCustomAverages].sort((a, b) => a.name.localeCompare(b.name));
+  const matchedCustomAverages = sourceCustomAverages.filter((custom) => !!customAverageMap[custom.id]).length;
   const filteredSubjects = sourceSubjects.filter((subject) =>
     subjectPath(subject, settings.sourceSubjects).toLocaleLowerCase().includes(search.toLocaleLowerCase()));
 
@@ -88,7 +94,7 @@ export default function YearComparisonForm({ close, onSavingChange }: {
     form.clearErrors("root");
     onSavingChange(true);
     try {
-      await settings.saveMappings({ subjectMap: values.subjectMap, periodMap: values.periodMap });
+      await settings.saveMappings({ subjectMap: values.subjectMap, periodMap: values.periodMap, customAverageMap: values.customAverageMap });
       settings.setReferenceYear(values.referenceYearId);
       settings.setScope(values.scope);
       settings.setEnabled(true);
@@ -100,9 +106,9 @@ export default function YearComparisonForm({ close, onSavingChange }: {
     }
   }
 
-  function mappingField(kind: "subjectMap" | "periodMap", id: string, label: string,
+  function mappingField(kind: "subjectMap" | "periodMap" | "customAverageMap", id: string, label: string,
     options: { id: string; name: string }[]) {
-    const mappings = kind === "subjectMap" ? subjectMap : periodMap;
+    const mappings = kind === "subjectMap" ? subjectMap : kind === "periodMap" ? periodMap : customAverageMap;
     return (
       <FormField key={id} control={form.control} name={`${kind}.${id}`} render={({ field }) => (
         <FormItem className="min-w-0">
@@ -138,6 +144,7 @@ export default function YearComparisonForm({ close, onSavingChange }: {
                   if (ready) drafts.current.set(pair, {
                     subjectMap: { ...form.getValues("subjectMap") },
                     periodMap: { ...form.getValues("periodMap") },
+                    customAverageMap: { ...form.getValues("customAverageMap") },
                   });
                   form.clearErrors("root");
                   field.onChange(value);
@@ -194,6 +201,17 @@ export default function YearComparisonForm({ close, onSavingChange }: {
                       </p>}
                     </AccordionContent>
                   </AccordionItem>
+                  {sourceCustomAverages.length > 0 && <AccordionItem value="custom-averages">
+                    <AccordionTrigger>
+                      <span className="flex flex-wrap items-center gap-2">
+                        {t("customAverages")}<Badge variant="secondary">{matchedCustomAverages}/{sourceCustomAverages.length}</Badge>
+                      </span>
+                    </AccordionTrigger>
+                    <AccordionContent className="flex flex-col gap-4">
+                      <p className="text-sm text-muted-foreground">{t("customAveragesHelp")}</p>
+                      {sourceCustomAverages.map((custom) => mappingField("customAverageMap", custom.id, custom.name, referenceCustomAverages))}
+                    </AccordionContent>
+                  </AccordionItem>}
                   {settings.sourcePeriods.length > 0 && <AccordionItem value="periods">
                     <AccordionTrigger>
                       <span className="flex flex-wrap items-center gap-2">

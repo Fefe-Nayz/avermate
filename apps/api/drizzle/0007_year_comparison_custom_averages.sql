@@ -1,0 +1,1 @@
+ALTER TABLE `year_comparisons` ADD `custom_average_map` text DEFAULT '{}' NOT NULL;

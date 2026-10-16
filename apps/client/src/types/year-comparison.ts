@@ -6,6 +6,7 @@ export type YearComparisonMap = Record<string, string | null>;
 export type YearComparisonMappings = {
   subjectMap: YearComparisonMap;
   periodMap: YearComparisonMap;
+  customAverageMap: YearComparisonMap;
 };
 
 export type YearComparison = YearComparisonMappings & {

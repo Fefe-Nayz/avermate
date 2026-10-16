@@ -17,12 +17,13 @@ export function ComparisonValue({ comparison, currentValue, subjectId, outOf = 2
 }) {
   const t = useTranslations("YearComparison");
   const format = useFormatter();
-  if (!comparison.active || subjectId?.startsWith("ca")) return null;
+  if (!comparison.active) return null;
   const reference = comparison.getReferenceAverage(subjectId);
   const scale = outOf / 2000;
-  const difference = currentValue !== null && reference !== null
+  const roundedDifference = currentValue !== null && reference !== null
     ? Math.round((currentValue - reference) * scale * 100) / 100
     : null;
+  const difference = roundedDifference === 0 ? 0 : roundedDifference;
   const number = (value: number) => format.number(value, { maximumFractionDigits: 2 });
 
   return (

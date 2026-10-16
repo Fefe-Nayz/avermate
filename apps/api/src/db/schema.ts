@@ -352,6 +352,7 @@ export const yearComparisons = sqliteTable("year_comparisons", {
     .references(() => years.id, { onUpdate: "cascade", onDelete: "cascade" }),
   subjectMap: text().notNull().default("{}"),
   periodMap: text().notNull().default("{}"),
+  customAverageMap: text().notNull().default("{}"),
   createdAt: integer({ mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer({ mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 }, (t) => ({

@@ -5,8 +5,9 @@ import type { PartialGrade } from "../types/grade";
 import type { Subject } from "../types/subject";
 import type { Period } from "../types/period";
 import type { Year } from "../types/year";
-import { average } from "./average";
-import { calendarDay, createYearComparison, getComparisonRange, sanitizeComparisonMap, suggestPeriodMap, suggestSubjectMap } from "./year-comparison";
+import type { Average } from "../types/average";
+import { addGeneralAverageToSubjects, average } from "./average";
+import { calendarDay, createYearComparison, getComparisonRange, sanitizeComparisonMap, suggestCustomAverageMap, suggestPeriodMap, suggestSubjectMap } from "./year-comparison";
 
 function grade(value: number, passedAt: string, extra: Partial<PartialGrade> = {}): PartialGrade {
   return { id: `${passedAt}-${value}`, name: "Grade", value, outOf: 2000, coefficient: 100,
@@ -18,6 +19,9 @@ function subject(id: string, name = id, extra: Partial<Subject> = {}): Subject {
 }
 function period(id: string, startAt: string, endAt: string, extra: Partial<Period> = {}): Period {
   return { id, name: id, startAt, endAt, yearId: "reference", userId: "user", createdAt: startAt, isCumulative: false, ...extra };
+}
+function customAverage(id: string, subjects: Average["subjects"], extra: Partial<Average> = {}): Average {
+  return { id, name: id, subjects, yearId: "reference", userId: "user", createdAt: 0, isMainAverage: false, ...extra };
 }
 const currentYear: Year = { id: "current", name: "2025-26", startDate: "2025-09-01", endDate: "2026-06-30", defaultOutOf: 2000 };
 const referenceYear: Year = { id: "reference", name: "2024-25", startDate: "2024-09-01", endDate: "2025-06-30", defaultOutOf: 2000 };
@@ -152,5 +156,98 @@ describe("year comparison calculation", () => {
     assert.equal(source[1].grades.length, 2);
     const missingPeriod = createYearComparison({ ...defaults, periodId: "unmapped", referenceSubjects: [] });
     assert.equal(missingPeriod.scopeCurrentSubjects(source), source);
+  });
+});
+
+describe("custom-average year comparison", () => {
+  const sourceConfig = customAverage("ca-source", [
+    { id: "maths", customCoefficient: 9, includeChildren: false },
+    { id: "english", customCoefficient: 1, includeChildren: false },
+  ], { yearId: "current", name: "Sciences" });
+  const referenceConfig = customAverage("ca-reference", [
+    { id: "r-maths", customCoefficient: 1, includeChildren: false },
+    { id: "r-english", customCoefficient: 3, includeChildren: false },
+  ], { name: "Sciences" });
+  const customInput = {
+    ...defaults,
+    subjectMap: {},
+    customAverageMap: { "ca-source": "ca-reference" },
+    sourceCustomAverages: [sourceConfig],
+    referenceCustomAverages: [referenceConfig],
+  };
+
+  it("suggests only unique normalized custom-average names", () => {
+    const source = [customAverage("a", [], { name: " Sciences générales " }), customAverage("b", [], { name: "Oral" })];
+    const reference = [customAverage("r", [], { name: "Sciences GENERALES" }),
+      customAverage("r2", [], { name: "Oral" }), customAverage("r3", [], { name: "oral" })];
+    assert.deepEqual(suggestCustomAverageMap(source, reference), { a: "r" });
+    assert.deepEqual(suggestCustomAverageMap([customAverage("a", [], { name: "Sciences" }), customAverage("b", [], { name: "sciences" })],
+      [customAverage("r", [], { name: "Sciences" })]), {});
+  });
+
+  it("compares each year's own formula and coefficients without subject mappings", () => {
+    const referenceSubjects = [
+      subject("r-maths", "Maths", { coefficient: 900, grades: [grade(5, "2024-09-03", { outOf: 10 })] }),
+      subject("r-english", "English", { coefficient: 100, grades: [grade(40, "2024-09-03", { outOf: 40 })] }),
+      subject("not-selected", "Unrelated", { grades: [grade(0, "2024-09-03")] }),
+    ];
+    const sourceSubjects = [subject("maths", "Maths", { grades: [grade(2000, "2025-09-03")] }),
+      subject("english", "English", { grades: [grade(1000, "2025-09-03")] })];
+    const model = createYearComparison({ ...customInput, referenceSubjects });
+    const scopedSource = model.scopeCurrentSubjects(addGeneralAverageToSubjects(sourceSubjects, sourceConfig));
+    assert.equal(average(sourceConfig.id, scopedSource), 19);
+    assert.equal(model.getReferenceAverage(sourceConfig.id), 17.5);
+    assert.equal(model.getReferenceAverage(sourceConfig.id), average(referenceConfig.id, addGeneralAverageToSubjects(referenceSubjects, referenceConfig)));
+    assert.equal(model.getReferenceAverage(), average(undefined, referenceSubjects));
+  });
+
+  it("honors hierarchy, includeChildren, and zero custom coefficients using existing custom semantics", () => {
+    const referenceSubjects = [subject("group", "Sciences", { isDisplaySubject: true }),
+      subject("parent", "Maths", { parentId: "group", grades: [grade(1000, "2024-09-03")] }),
+      subject("child", "Oral", { parentId: "parent", coefficient: 300, grades: [grade(2000, "2024-09-03")] }),
+      subject("outside", "Unrelated", { grades: [grade(0, "2024-09-03")] })];
+    const calculate = (entry: Average["subjects"][number]) => createYearComparison({ ...customInput,
+      referenceSubjects, referenceCustomAverages: [customAverage("ca-reference", [entry])],
+    }).getReferenceAverage("ca-source");
+    assert.equal(calculate({ id: "parent", customCoefficient: null, includeChildren: false }), 10);
+    assert.equal(calculate({ id: "parent", customCoefficient: null, includeChildren: true }), 17.5);
+    assert.equal(calculate({ id: "group", customCoefficient: null, includeChildren: true }), 17.5);
+    assert.equal(calculate({ id: "parent", customCoefficient: 0, includeChildren: true }), 20);
+    assert.equal(calculate({ id: "group", customCoefficient: null, includeChildren: false }), null);
+  });
+
+  it("filters custom grades before applying the formula and aligns snapshot series without future leakage", () => {
+    const referenceSubjects = [subject("r-maths", "Maths", { grades: [grade(1000, "2024-09-03"), grade(2000, "2024-09-06")] })];
+    const input = { ...customInput, referenceSubjects, snapshotDate: "2025-09-04" };
+    const model = createYearComparison(input);
+    assert.equal(model.getReferenceAverage("ca-source"), 10);
+    assert.deepEqual(model.getReferenceSeries(["2025-09-02", "2025-09-03", "2025-09-04", "2025-09-06"], "ca-source")
+      .map((point) => [point.referenceDate, point.value]),
+      [["2024-09-02", null], ["2024-09-03", 10], ["2024-09-04", 10], ["2024-09-04", null]]);
+    assert.equal(createYearComparison({ ...input, scope: "full-period" }).getReferenceAverage("ca-source"), 15);
+    assert.equal(referenceSubjects[0].grades.length, 2);
+  });
+
+  it("uses mapped noncumulative and cumulative periods for custom averages", () => {
+    const referenceSubjects = [subject("r-maths", "Maths", { grades: [grade(1000, "2024-09-03"),
+      grade(2000, "2025-01-03", { periodId: "r2" }), grade(0, "2025-04-03", { periodId: "r2" })] })];
+    const input = { ...customInput, referenceSubjects, periodId: "s2", now: new Date("2026-02-01") };
+    assert.equal(createYearComparison(input).getReferenceAverage("ca-source"), 20);
+    assert.equal(createYearComparison({ ...input,
+      sourcePeriods: sourcePeriods.map((entry) => ({ ...entry, isCumulative: true })),
+      referencePeriods: referencePeriods.map((entry) => ({ ...entry, isCumulative: true })),
+    }).getReferenceAverage("ca-source"), 15);
+  });
+
+  it("preserves valid zero and returns null for unmapped, deleted, empty, and excluded custom averages", () => {
+    const referenceSubjects = [subject("r-maths", "Maths", { grades: [grade(0, "2024-09-03")] })];
+    const input = { ...customInput, referenceSubjects };
+    assert.equal(createYearComparison(input).getReferenceAverage("ca-source"), 0);
+    assert.equal(createYearComparison({ ...input, customAverageMap: {} }).getReferenceAverage("ca-source"), null);
+    assert.equal(createYearComparison({ ...input, customAverageMap: { "ca-source": null } }).getReferenceAverage("ca-source"), null);
+    assert.equal(createYearComparison({ ...input, sourceCustomAverages: [] }).getReferenceAverage("ca-source"), null);
+    assert.equal(createYearComparison({ ...input, referenceCustomAverages: [] }).getReferenceAverage("ca-source"), null);
+    assert.equal(createYearComparison({ ...input, referenceCustomAverages: [customAverage("ca-reference", [])] }).getReferenceAverage("ca-source"), null);
+    assert.equal(createYearComparison({ ...input, customAverageMap: {} }).getReferenceSeries(["2025-09-04"], "ca-source")[0].value, null);
   });
 });
