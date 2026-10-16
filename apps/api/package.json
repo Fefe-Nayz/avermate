@@ -19,7 +19,7 @@
     "@t3-oss/env-core": "^0.13.8",
     "better-auth": "^1.5.5",
     "discord.js": "^14.25.1",
-    "drizzle-orm": "^0.45.1",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.12.8",
     "ky": "^1.14.1",
     "nanoid": "^5.1.7",
